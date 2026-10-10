@@ -1414,3 +1414,179 @@ body[data-phase="countdown"] #round-cue {
     animation: none !important;
   }
 }
+/* Workshop entrance: club palettes over the live room. */
+body[data-entrance="true"] { --entry-ink: #30296e; --entry-base: #eeebfc; --entry-accent: #6356ad; }
+body[data-entrance="true"][data-theme="peach"] { --entry-ink: #673b36; --entry-base: #fff3dd; --entry-accent: #ce654f; }
+body[data-entrance="true"] #scene { filter: blur(3px) brightness(.55); }
+body[data-entrance="true"] header, body[data-entrance="true"] .status, body[data-entrance="true"] footer, body[data-entrance="true"] #board, body[data-entrance="true"] #vaults { visibility: hidden; }
+body[data-entrance="true"] #overlay { overflow-y: auto; background: rgba(25,22,39,.24); display: block; }
+.entrance { width: min(460px, calc(100% - 36px)); margin: 28px auto; color: var(--entry-base); text-align: center; }
+.entrance-title h2 { font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif; font-size: clamp(48px, 7vw, 76px); line-height: .95; margin: 0; letter-spacing: -3px; text-shadow: 0 5px 0 var(--entry-ink); }
+.entrance-title h2 span { display: block; font-size: .48em; letter-spacing: -1px; margin-top: 12px; }
+.entrance #palette { padding: 5px 12px; margin: 16px 0 10px; background: transparent; color: var(--entry-base); border: 1px solid currentColor; font-size: 12px; }
+.entrance-account p { font-size: 12px; margin: 8px 0 14px; }
+.entrance-account label { display: block; text-align: left; font-weight: 700; margin-bottom: 5px; }
+.entrance-account input { width: 100%; background: var(--entry-base); color: var(--entry-ink); border: 2px solid var(--entry-accent); font-size: 20px; padding: 12px 16px; border-radius: 6px; }
+.entrance-account small { display: block; text-align: left; font-size: 11px; margin-top: 4px; }
+.locker-stage { display: grid; grid-template-columns: 48px 1fr 48px; align-items: center; height: 230px; }
+#locker { width: 100%; height: 230px; touch-action: none; cursor: grab; background: radial-gradient(ellipse at 50% 95%, var(--entry-accent), transparent 65%); }
+.locker-stage button { background: transparent; color: var(--entry-base); font-size: 48px; padding: 0; border: 0; }
+.skin-caption strong { display: block; font-size: 20px; }
+.skin-caption span { font-size: 11px; opacity: .8; }
+.locker-options { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin: 16px 0; text-align: left; }
+.locker-options label { font-size: 12px; }
+.locker-options select { width: 100%; padding: 8px; margin-top: 4px; background: var(--entry-base); color: var(--entry-ink); border-radius: 4px; }
+.entrance #play { width: 100%; background: var(--entry-accent); color: white; font-size: 22px; font-weight: 800; border: 2px solid var(--entry-base); border-radius: 6px; padding: 12px; box-shadow: 0 4px 0 var(--entry-ink); }
+#entrance-room { font-size: 12px; min-height: 18px; margin: 14px 0; }
+.entrance-sponsors span { display: block; font-size: 11px; margin-bottom: 7px; }
+.entrance-sponsors img { width: 100%; height: auto; border-radius: 3px; }
+.discord-invite { position: fixed; bottom: 24px; left: 24px; color: var(--entry-ink); background: var(--entry-base); padding: 14px 20px; border-radius: 5px; font-weight: 700; text-decoration: none; }
+.entrance :focus-visible { outline: 3px solid white; outline-offset: 4px; }
+@media(max-width: 750px), (max-height: 760px) { .entrance { margin: 18px auto; } .entrance-title h2 { font-size: 48px; } .locker-stage, #locker { height: 190px; } .discord-invite { position: static; display: inline-block; margin-top: 20px; } }
+/* Second entrance pass: banner, workshop splash and sponsor deck. */
+.entrance { margin-top: 34px; }
+.entrance-title { position: relative; margin-bottom: 22px; }
+.club-banner-frame { padding: 7px; background: var(--entry-base); border: 2px solid var(--entry-accent); border-radius: 12px 5px 12px 5px; box-shadow: 0 5px 0 var(--entry-ink), 0 14px 30px #0003; animation: club-float 5s ease-in-out infinite; }
+.club-banner-frame img { display: block; width: 100%; border-radius: 4px; }
+body[data-theme="peach"] .club-banner-frame { background: linear-gradient(130deg,#fff0b3,#efa57e,#ee6b70); }
+.entrance-title h2 { font-size: 38px; letter-spacing: -1px; margin-top: 16px; }
+.workshop-splash { display: block; position: absolute; right: -40px; bottom: -12px; transform: rotate(-12deg); color: #ffe39e; font-size: 16px; font-weight: 800; text-shadow: 1px 2px 0 #302641; animation: splash-bob 2s ease-in-out infinite; pointer-events: none; }
+.entrance-menu { position: fixed; top: 22px; right: 24px; z-index: 4; text-align: left; }
+.entrance-menu summary { cursor: pointer; padding: 10px 18px; background: var(--entry-base); color: var(--entry-ink); border-radius: 5px; font-weight: 700; }
+.entrance-menu > div { margin-top: 8px; padding: 14px; background: var(--entry-base); color: var(--entry-ink); border-radius: 5px; box-shadow: 0 8px 24px #0004; }
+.entrance-menu label { display: block; font-size: 13px; }
+.entrance #palette { display: block; padding: 8px; margin: 8px 0 0; background: var(--entry-base); color: var(--entry-ink); font-size: 14px; border-radius: 3px; }
+.locker-stage { position: relative; isolation: isolate; }
+.locker-stage::before { content: ""; position: absolute; z-index: -1; inset: 5% 10% -24px; background: radial-gradient(ellipse, color-mix(in srgb,var(--entry-accent) 45%,transparent), transparent 68%); pointer-events: none; }
+#locker { background: transparent; }
+#locker:active { cursor: grabbing; }
+.entrance button, .entrance select, .discord-invite, .entrance-menu summary { transition: transform .18s ease, filter .18s ease, box-shadow .18s ease; }
+.entrance button:hover, .discord-invite:hover, .entrance-menu summary:hover { transform: translateY(-2px); filter: brightness(1.12); }
+.entrance button:active, .discord-invite:active { transform: translateY(2px) scale(.98); }
+.entrance select:hover { filter: brightness(1.07); }
+.locker-stage button:hover { transform: scale(1.2); }
+.sponsor-carousel { width: 360px; max-width: 100%; margin: 0 auto; }
+.sponsor-deck { height: 116px; position: relative; overflow: hidden; perspective: 650px; }
+.sponsor-slide { position: absolute; width: 230px; height: 104px; top: 6px; left: calc(50% - 115px); overflow: hidden; border-radius: 8px; box-shadow: 0 4px 14px #0003; transition: transform .8s cubic-bezier(.22,.7,.25,1), opacity .8s; }
+.sponsor-art { width: 100%; height: 100%; background-image: url('/assets/workshop-sponsors.png'); background-repeat: no-repeat; background-size: 496% 121%; background-position: calc(var(--sponsor-index) * 100% / 3) 50%; }
+.sponsor-slide[data-position="front"] { transform: translateX(0) scale(1); opacity: 1; z-index: 3; }
+.sponsor-slide[data-position="previous"] { transform: translateX(-158px) scale(.72) rotateY(20deg); opacity: .3; z-index: 2; }
+.sponsor-slide[data-position="next"] { transform: translateX(158px) scale(.72) rotateY(-20deg); opacity: .3; z-index: 2; }
+.sponsor-slide[data-position="back"] { transform: translateY(10px) scale(.58); opacity: 0; z-index: 0; }
+.entrance #sponsor-pause { background: transparent; color: var(--entry-base); border: 0; padding: 5px 12px; font-size: 11px; }
+.discord-invite { display: flex; align-items: center; gap: 12px; }
+.discord-invite svg { width: 32px; height: 32px; color: #5865f2; }
+@keyframes club-float { 50% { transform: translateY(-4px) rotate(.4deg); } }
+@keyframes splash-bob { 50% { transform: rotate(-12deg) scale(1.045); } }
+@media(max-width: 750px), (max-height: 760px) { .entrance { margin-top: 70px; } .entrance-title h2 { font-size: 32px; } .workshop-splash { right: 0; font-size: 12px; bottom: -15px; } .discord-invite { display: inline-flex; } .entrance-menu { top: 12px; right: 16px; } }
+@media(prefers-reduced-motion: reduce) { .club-banner-frame, .workshop-splash { animation: none; } .entrance *, .discord-invite { transition: none !important; } }
+.workshop-splash { bottom: 32px; right: -30px; }
+@media(min-width: 751px) { .discord-invite { position: fixed; left: 24px; bottom: 24px; margin-top: 0; } }
+@media(max-width: 750px) { .workshop-splash { bottom: 30px; right: 0; } }
+.entrance-menu summary { list-style: none; display: flex; align-items: center; gap: 8px; }
+.entrance-menu summary::-webkit-details-marker { display: none; }
+.menu-burger { font-size: 20px; line-height: 1; }
+.workshop-splash { right: -58px; bottom: 58px; max-width: 250px; font-size: 19px; line-height: 1.2; text-shadow: 1px 2px 0 #302641, 0 0 8px #302641; }
+.sponsor-slide { transition: transform .8s cubic-bezier(.22,.7,.25,1), opacity .8s, filter .8s, border-radius .8s; }
+.sponsor-slide[data-position="front"] { filter: blur(0); border-radius: 10px; }
+.sponsor-slide[data-position="previous"], .sponsor-slide[data-position="next"] { border-radius: 22px; filter: blur(2px); opacity: .24; }
+.sponsor-deck { mask-image: linear-gradient(to right,transparent,#000 12%,#000 88%,transparent); }
+@media(max-width: 750px) { .workshop-splash { right: -4px; bottom: 51px; font-size: 15px; max-width: 190px; } }
+/* Fit the workshop entrance to the screen; sponsors occupy their own corner. */
+body[data-entrance="true"] #overlay { overflow: hidden; }
+.entrance { width: clamp(280px, 49vh, 420px); max-width: calc(100vw - 36px); margin: 18px auto 0; }
+.entrance-title { margin-bottom: 12px; }
+.club-banner-frame { max-width: 360px; margin: auto; padding: 5px; }
+.entrance-title h2 { font-size: 30px; margin-top: 12px; }
+.workshop-splash { right: -60px; bottom: 34px; font-size: 17px; max-width: 225px; transform: rotate(-19deg); }
+@keyframes splash-bob { 50% { transform: rotate(-19deg) scale(1.045); } }
+.entrance-account p { margin: 6px 0 10px; font-size: 11px; }
+.entrance-account input { padding: 10px 14px; font-size: 18px; }
+.locker-stage, #locker { height: clamp(120px, 28vh, 210px); }
+.skin-caption strong { font-size: 18px; }
+.locker-options { margin: 12px 0; }
+.entrance #play { padding: 10px; }
+#entrance-room { margin: 10px 0; }
+.entrance-sponsors { position: fixed; bottom: 12px; right: 22px; width: 240px; }
+.sponsor-carousel { width: 240px; }
+.sponsor-deck { height: 220px; overflow: hidden; mask-image: linear-gradient(to bottom,transparent,#000 16%,#000 84%,transparent); }
+.sponsor-slide { top: 58px; }
+.sponsor-slide[data-position="previous"] { transform: translateY(-76px) scale(.76) rotateX(-12deg); }
+.sponsor-slide[data-position="next"] { transform: translateY(76px) scale(.76) rotateX(12deg); }
+.sponsor-slide[data-position="back"] { transform: scale(.58); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.entrance-account input.name-rejected { border-color: #ff5a66; background: #ffe1e4; color: #8b1825; animation: name-shake .4s ease; }
+@keyframes name-shake { 15%,45%,75% { transform: translateX(-7px); } 30%,60%,90% { transform: translateX(7px); } }
+@media(max-width: 750px) { .entrance { margin-top: 58px; width: min(350px,calc(100vw - 36px)); } .workshop-splash { right: -4px; bottom: 33px; font-size: 14px; max-width: 180px; } .entrance-sponsors { width: 125px; right: 8px; bottom: 4px; } .sponsor-carousel { width: 125px; } .sponsor-deck { height: 104px; } .sponsor-slide { width: 120px; height: 54px; left: calc(50% - 60px); top: 25px; } .sponsor-slide[data-position="previous"] { transform: translateY(-35px) scale(.76); } .sponsor-slide[data-position="next"] { transform: translateY(35px) scale(.76); } .discord-invite { position: fixed; left: 10px; bottom: 16px; padding: 8px; font-size: 12px; } .discord-invite svg { width: 24px; height: 24px; } }
+@media(max-height: 640px) { .entrance { margin-top: 10px; width: 280px; } .club-banner-frame { max-width: 270px; } .locker-stage, #locker { height: 120px; } .entrance-title h2 { font-size: 24px; margin-top: 8px; } .entrance-account p { margin: 4px 0; } .locker-options { margin: 8px 0; } }
+@media(prefers-reduced-motion: reduce) { .entrance-account input.name-rejected { animation: none; } }
+.workshop-splash { left: calc(100% - 20px); right: auto; bottom: 40px; width: 220px; transform-origin: left center; }
+.sponsor-art { background-size: 427% 110%; }
+@media(max-width: 750px) { .workshop-splash { left: calc(100% - 82px); width: 165px; bottom: 36px; } }
+@media(prefers-reduced-motion: reduce) { .entrance-account input[aria-invalid="true"] { border-color: #ff5a66; background: #ffe1e4; } }
+/* Final preliminary entrance proportions. */
+.entrance-title h2 { margin-top: 34px; margin-bottom: 18px; }
+.workshop-splash { left: auto; right: -70px; bottom: 60px; width: max-content; max-width: 250px; text-align: center; transform: rotate(-43deg); transform-origin: center; }
+@keyframes splash-bob { 50% { transform: rotate(-43deg) scale(1.045); } }
+.entrance-sponsors { width: 320px; bottom: 22px; right: 16px; }
+.sponsor-carousel { width: 320px; }
+.sponsor-deck { height: 116px; mask-image: linear-gradient(to right,transparent,#000 12%,#000 88%,transparent); }
+.sponsor-slide { width: 200px; height: 90px; left: calc(50% - 100px); top: 13px; }
+.sponsor-slide[data-position="previous"] { transform: translateX(-135px) scale(.76) rotateY(16deg); }
+.sponsor-slide[data-position="next"] { transform: translateX(135px) scale(.76) rotateY(-16deg); }
+.sponsor-slide[data-position="back"] { transform: scale(.58); }
+@media(max-width: 750px) { .entrance-title h2 { margin-top: 32px; margin-bottom: 14px; } .workshop-splash { left: auto; right: -12px; bottom: 58px; max-width: 190px; width: max-content; } .entrance-sponsors { width: 160px; right: 4px; bottom: 10px; } .sponsor-carousel { width: 160px; } .sponsor-deck { height: 64px; } .sponsor-slide { width: 120px; height: 54px; left: calc(50% - 60px); top: 5px; } .sponsor-slide[data-position="previous"] { transform: translateX(-80px) scale(.76); } .sponsor-slide[data-position="next"] { transform: translateX(80px) scale(.76); } }
+@media(max-height: 640px) { .entrance-title h2 { margin-top: 28px; margin-bottom: 12px; } .workshop-splash { bottom: 49px; } }
+.workshop-splash { top: 95px; bottom: auto; right: -160px; width: 260px; max-width: 260px; }
+@media(max-width: 750px) { .workshop-splash { top: 87px; right: -62px; width: 190px; max-width: 190px; font-size: 13px; } }
+@media(max-height: 640px) { .workshop-splash { top: 74px; right: -130px; width: 220px; max-width: 220px; font-size: 14px; } }
+
+/* Anchor the splash to the banner corner rather than outside the title. */
+.workshop-splash { top: 108px; bottom: auto; left: auto; right: -48px; width: 230px; max-width: 230px; font-size: 17px; transform: rotate(-35deg); transform-origin: center; }
+@keyframes splash-bob { 50% { transform: rotate(-35deg) scale(1.045); } }
+@media(max-width: 750px) { .workshop-splash { top: 108px; right: -12px; width: 190px; max-width: 190px; font-size: 14px; } }
+@media(max-height: 640px) { .workshop-splash { top: 88px; right: -36px; width: 190px; max-width: 190px; font-size: 14px; } }
+.settings-menu { position: fixed; right: 22px; bottom: 70px; z-index: 30; color: #f5f7ef; }
+.settings-menu > summary { list-style: none; cursor: pointer; padding: 10px 16px; background: #303b45; border: 1px solid #87979b; border-radius: 5px; }
+.settings-menu > summary::-webkit-details-marker { display: none; }
+.settings-panel { position: absolute; right: 0; bottom: calc(100% + 10px); width: 230px; padding: 16px; background: #27333e; box-shadow: 0 6px 24px #0005; border-radius: 6px; display: grid; gap: 10px; }
+.settings-panel label { font-size: 13px; }
+.settings-panel select { margin-top: 6px; width: 100%; padding: 8px; }
+.settings-panel button { text-align: left; padding: 9px 12px; }
+.settings-panel p { font-size: 12px; line-height: 1.7; }
+body[data-entrance="true"] .settings-menu { top: 12px; bottom: auto; }
+body[data-entrance="true"] .settings-panel { bottom: auto; top: calc(100% + 10px); }
+body[data-entrance="true"] #help { display: none; }
+body:not([data-view="player"]) .settings-menu { display: none; }
+#ready { padding: 12px 20px; font-size: 16px; background: #ffe39e; color: #3c3322; border: 2px solid #ffe39e; box-shadow: 0 0 0 3px #ffe39e33; animation: ready-pulse 1.8s ease-in-out infinite; }
+#ready.ready-confirmed { background: #8be0ac; border-color: #8be0ac; color: #123b24; box-shadow: none; animation: none; }
+@keyframes ready-pulse { 50% { box-shadow: 0 0 0 7px #ffe39e11; } }
+body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after { animation: none !important; transition: none !important; }
+@media(prefers-reduced-motion: reduce) { #ready { animation: none; } }
+/* Four equal pie quarters, with labels centered in each slice. */
+#emote-menu { width: 320px; height: 320px; border: 2px solid #a5babb66; }
+#emote-menu > span { top: -34px; font-size: 16px; }
+#emote-menu > small { bottom: -30px; }
+#emote-menu button { width: 50%; height: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0; border: 1px solid #a5babb55; border-radius: 0; padding: 18px; }
+#emote-menu button:nth-of-type(1) { top: 0; left: 0; bottom: auto; right: auto; border-top-left-radius: 100%; padding: 34px 8px 8px 34px; }
+#emote-menu button:nth-of-type(2) { top: 0; right: 0; bottom: auto; left: auto; border-top-right-radius: 100%; padding: 34px 34px 8px 8px; }
+#emote-menu button:nth-of-type(3) { bottom: 0; left: 0; top: auto; right: auto; border-bottom-left-radius: 100%; padding: 8px 8px 34px 34px; }
+#emote-menu button:nth-of-type(4) { bottom: 0; right: 0; top: auto; left: auto; border-bottom-right-radius: 100%; padding: 8px 34px 34px 8px; }
+#emote-menu button:hover, #emote-menu button:focus-visible { transform: none; background: #b8c9c655; }
+#emote-menu kbd { margin: 0 0 8px; }
+
+.roster-player { padding: 10px 0; border-top: 1px solid #ffffff25; }
+.roster-player > span { display: block; font-size: 12px; opacity: .8; margin: 3px 0 6px; }
+.roster-player > div { display: flex; gap: 5px; flex-wrap: wrap; }
+.roster-player button { padding: 5px 8px; font-size: 11px; }
+.host-help { font-size: 12px; opacity: .8; }
+body[data-view="host"] #social { max-width: 270px; }
+
+body[data-view="host"] #social { left: auto; right: 28px; top: 205px; }
+
+body[data-view="host"] #social { top: auto; bottom: 85px; }
+body[data-view="host"] #messages { height: min(150px, 22vh); }
+
+.locker-options { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.locker-options select { padding: 8px 3px; font-size: 11px; }
+@media(max-width: 420px) { .locker-options { grid-template-columns: repeat(2,minmax(0,1fr)); margin: 7px 0; row-gap: 4px; } .locker-options select { padding: 5px 3px; margin-top: 2px; } }

@@ -138,3 +138,17 @@ The initial lobby and each new round show a blurred, animated three-step instruc
 The pre-round countdown appears once, from 8 to 1: 8–4 white, 3 red, 2 yellow, 1 green. The gameplay clock returns to the top-center HUD; its last ten seconds fade red and pulse, with reduced-motion support. E opens the emote wheel; 1/2/3 select Wave/Scuba/Dance and E/Escape close it. Inputs, textareas and editable text suppress the shortcut.
 
 Lobby cameras retain the normal camera distance even behind tunnel/wall geometry; occlusion is allowed instead of automatic camera shortening or boundary correction. Visible rotated vault floors now match their rotated authoritative colliders, including Diamond’s previously mismatched corner. Midair reverse braking is eased from 60 to 48, retaining 24 normal air acceleration and 0.5 release drag.
+
+## Browser-session recovery
+
+Google sign-in is not required. Keep the same URL and browser profile: the browser saves a private random player token plus name/appearance, and STATE_FILE saves the player record and earned scores. Refresh/reopen shows the saved entrance profile and Rejoin lobby. During countdown, active practice/scoring, or results, rejoining moves the player to a separate waiting lobby, excludes them from the current payout, and shows round status/time. They can move/chat/emote there; the next host-loaded round admits connected waiting players through the normal loading/Continue gate. Joining while a round is still loading can participate in that loading round.
+
+A temporary socket disconnect within the same page automatically reconnects with its temporary page ID, retaining current-round eligibility if that round is still ongoing. The server freezes disconnected players; they earn zero if still disconnected at the deadline. No catch-up payout is awarded. A second tab takes over the existing player instead of duplicating their score; it follows the fresh-page lobby path. Private browsing, clearing site storage, another browser/device, or changing the URL origin creates a different identity. Keep STATE_FILE on durable storage when hosting. Page IDs are private, temporary, and omitted from public snapshots and saved state.
+
+## Sound and menu
+
+Audio is enabled by default after the first click/key interaction. Menu → Mute audio saves the preference. Quiet synthesized cues cover hovering/clicking controls, personal jumps, ready confirmation, countdown/start, vault entry and results. Lobby emotes use the supplied audio clips locally: Wave, Scuba, Dance and Griddy (E, then 1–4). Emotes repeat until movement/jumping cancels; sound/animation fades out and stops on disconnect or round loading. Other players' jumps/emotes and decorative entrance bears are silent for your client.
+
+Menu remains available during entry, lobby and rounds, with theme, sound, graphics, reduced-motion, Rules and a controls reminder. Host Gather ready checks highlights Confirm ready; server confirmation turns it green and displays Ready confirmed.
+
+Audio polish: button sounds are limited to primary actions and menu controls; hover sounds only on Play/Continue. Wave repeats after a short pause. Griddy moves the bear slowly forward in the lobby until manual movement/jumping cancels. Hazard/platform sounds attenuate with distance and elevation; only the nearest two platform mechanisms contribute ambience. Scored/practice rounds tick once per second during their last ten seconds, with no heartbeat layer.

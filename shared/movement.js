@@ -74,6 +74,12 @@ export function move(p, input, dt, world = "arena1", time = 0) {
   let ix = input.x || 0,
     iz = input.z || 0,
     length = Math.hypot(ix, iz);
+  if (length > 0.01) p.facing = Math.atan2(ix, iz);
+  if (world === "lobby" && p.emoteActive && p.emoteName === "griddy" && length === 0 && !input.jump) {
+    ix = Math.sin(p.emoteFacing ?? Math.PI) * .2;
+    iz = Math.cos(p.emoteFacing ?? Math.PI) * .2;
+    length = .2;
+  }
   if (length > 1) {
     ix /= length;
     iz /= length;
@@ -154,6 +160,7 @@ export function move(p, input, dt, world = "arena1", time = 0) {
         p.vz -= out * nz;
       }
     }
+    const wasGrounded = p.grounded;
     const oldY = p.y;
     p.vy = (p.vy || 0) - MOVEMENT.gravity * step;
     p.y += p.vy * step;
@@ -173,6 +180,7 @@ export function move(p, input, dt, world = "arena1", time = 0) {
         )
         .sort((a, b) => b.y + b.h / 2 - (a.y + a.h / 2))[0];
       if (landing) {
+        if (!wasGrounded) { p.vx = 0; p.vz = 0; }
         p.y = landing.y + landing.h / 2;
         p.vy = 0;
         p.grounded = true;

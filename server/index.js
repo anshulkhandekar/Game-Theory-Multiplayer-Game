@@ -59,16 +59,24 @@ wss.on("connection", (ws) => {
       if (m.type === "host") {
         if (!ws.host) throw Error("Unauthorized host action");
         game.command(m.action, m.data);
+        if (["disconnectPlayer", "kickPlayer"].includes(m.action))
+          for (const client of wss.clients) if (client.player === m.data?.id)
+            client.close(m.action === "kickPlayer" ? 4002 : 4001, "Removed by host");
         persist();
         return;
       }
       if (m.type === "join") {
         if (ws.player) return;
+        if (typeof m.name !== "string" || !/^[A-Za-z0-9]{1,24}$/.test(m.name))
+          throw Error("Use 1–24 letters and numbers for your username.");
         const p = game.join(
           typeof m.id === "string" ? m.id : null,
           m.name,
           m.appearance,
+          { pageId: typeof m.pageId === "string" && /^[a-f0-9-]{36}$/i.test(m.pageId) ? m.pageId : randomBytes(18).toString("hex"), resume: m.resume === true },
         );
+        p.name = game.name(m.name);
+        p.appearance = game.appearance(m.appearance || {});
         for (const old of wss.clients)
           if (old !== ws && old.player === p.id) {
             old.player = null;
@@ -94,6 +102,7 @@ wss.on("connection", (ws) => {
           Math.abs(m.z) > 1
         )
           throw Error("Invalid input");
+        if (m.x || m.z || m.jump) game.stopEmote(p);
         p.input = { x: m.x, z: m.z, jump: !!m.jump };
         p.lastInput = Date.now();
       }
@@ -104,6 +113,7 @@ wss.on("connection", (ws) => {
   ws.on("close", () => {
     const p = game.players.get(ws.player);
     if (p) {
+      game.stopEmote(p);
       p.connected = false;
       p.input = {};
       persist();
@@ -124,7 +134,7 @@ setInterval(() => {
   }
   const payload = JSON.stringify({ type: "state", state: game.snapshot() });
   for (const ws of wss.clients)
-    if (ws.readyState === WebSocket.OPEN) ws.send(payload);
+    if (ws.readyState === WebSocket.OPEN) ws.send(ws.player ? JSON.stringify({ type: "state", state: game.snapshotFor(ws.player) }) : payload);
 }, 50);
 setInterval(() => {
   for (const ws of wss.clients) {

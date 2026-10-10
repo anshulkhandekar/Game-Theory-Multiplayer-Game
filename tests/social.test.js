@@ -86,3 +86,19 @@ test("round event feed records authoritative falls and vault entry", () => {
     g.snapshot().messages.some((m) => m.text === "entered the bronze vault"),
   );
 });
+
+test('emotes loop until cancelled, include Griddy, and stop before a round', () => {
+  let now = 0;
+  const g = new Game({ now: () => now });
+  const p = g.join(null, 'Dancer');
+  g.emote(p, 'griddy');
+  now = 15000;
+  assert.equal(g.snapshot().players[0].emoteActive, true);
+  assert.equal(g.snapshot().players[0].emoteAge, 15);
+  g.stopEmote(p);
+  assert.equal(g.snapshot().players[0].emoteActive, false);
+  assert.equal(g.snapshot().players[0].emoteFadeAge, 0);
+  g.emote(p, 'dance');
+  g.command('practice');
+  assert.equal(p.emoteActive, false);
+});

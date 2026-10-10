@@ -1,3 +1,4 @@
+import { dressBear } from "./wardrobe.js";
 import * as THREE from "three";
 import { move, canMove } from "../shared/movement.js";
 import {
@@ -18,6 +19,7 @@ const COLORS = {
   yellow: "#ffda6a",
 };
 export function createScene(canvas) {
+  let userReducedMotion = localStorage.getItem("bear-motion") === "true";
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
   renderer.shadowMap.enabled = true;
@@ -250,7 +252,7 @@ export function createScene(canvas) {
         lounge,
       );
   }
-  mesh(
+  const lobbyRoof = mesh(
     new THREE.CylinderGeometry(15, 15, 0.3, 64),
     "#657477",
     0,
@@ -258,8 +260,8 @@ export function createScene(canvas) {
     0,
     lounge,
   );
-  for (const x of [-8, -4, 0, 4, 8])
-    mesh(new THREE.BoxGeometry(0.22, 0.3, 24), "#a78763", x, 7.15, 0, lounge);
+  const lobbyRafters = [-8, -4, 0, 4, 8].map(x =>
+    mesh(new THREE.BoxGeometry(0.22, 0.3, 24), "#a78763", x, 7.15, 0, lounge));
   const parkour = new THREE.Group();
   scene.add(parkour);
   environment.decorateLobby(lounge);
@@ -320,8 +322,8 @@ export function createScene(canvas) {
             ? "#424251"
             : kind === "panda"
               ? "#f2efdf"
-              : "#ab795b",
-      dark = kind === "panda" ? "#34343f" : body;
+              : kind === "red" ? "#b85832" : "#ab795b",
+      dark = ["panda", "red"].includes(kind) ? "#34343f" : body;
     mesh(
       new THREE.SphereGeometry(0.48, 24, 16),
       body,
@@ -401,19 +403,23 @@ export function createScene(canvas) {
       rig,
     ).scale.set(1, 0.65, 0.6);
     mesh(new THREE.SphereGeometry(0.065, 10, 8), "#252938", 0, 1.41, 0.51, rig);
-    ring(0.39, COLORS[player.appearance.color], 0, 1.03, 0, 0.095, rig);
+    const accent = COLORS[player.appearance.color] || "#a58be4";
+    if (["mint", "pink", "blue", "yellow"].includes(player.appearance.color)) {
+    ring(0.39, accent, 0, 1.03, 0, 0.095, rig);
     mesh(
       new THREE.BoxGeometry(0.12, 0.35, 0.09),
-      COLORS[player.appearance.color],
+      accent,
       0.18,
       0.85,
       0.42,
       rig,
     );
+    }
+    dressBear(rig, arms, player.appearance, accent);
     if (player.appearance.hat === "cap") {
       mesh(
         new THREE.SphereGeometry(0.38, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-        COLORS[player.appearance.color],
+        accent,
         0,
         1.91,
         0,
@@ -421,7 +427,7 @@ export function createScene(canvas) {
       );
       mesh(
         new THREE.BoxGeometry(0.55, 0.045, 0.32),
-        COLORS[player.appearance.color],
+        accent,
         0,
         1.94,
         0.3,
@@ -449,11 +455,26 @@ export function createScene(canvas) {
         );
       }
     }
+    if (kind === "red") {
+      for (const side of [-1, 1]) mesh(new THREE.SphereGeometry(0.17, 12, 8), "#fff1dc", side * 0.3, 1.4, 0.36, rig);
+      const tail = mesh(new THREE.CylinderGeometry(0.13, 0.2, 0.9, 12), body, 0, 0.6, -0.65, rig);
+      tail.rotation.x = 0.8;
+    }
+    if (player.appearance.glasses === "round") {
+      for (const side of [-1, 1]) {
+        const lens = mesh(new THREE.TorusGeometry(0.13, 0.025, 8, 20), "#202333", side * 0.17, 1.58, 0.54, rig);
+      }
+      mesh(new THREE.BoxGeometry(0.1, 0.025, 0.025), "#202333", 0, 1.58, 0.54, rig);
+    }
     // Bear materials are private copies: transparency must never affect world materials.
     const avatarMaterials = [];
     rig.traverse((o) => {
       if (!o.isMesh) return;
-      o.material = o.material.clone();
+      const original = o.material;
+      o.material = original.clone();
+      o.material.userData.keepTransparency = original.transparent;
+      o.material.userData.keepDepthWrite = original.depthWrite;
+      if (o.userData.wardrobeMaterial) original.dispose();
       avatarMaterials.push(o.material);
     });
     const name = label(player.name, "#ffffff", 3);
@@ -475,6 +496,7 @@ export function createScene(canvas) {
     return {
       root,
       avatarMaterials,
+      appearanceKey: JSON.stringify(player.appearance),
       name,
       rig,
       arms,
@@ -487,6 +509,12 @@ export function createScene(canvas) {
       squash: 0,
     };
   }
+  // Decorative entrance cast shares the real lobby and avatar geometry only.
+  const entranceCast = ["panda", "brown", "polar", "black", "red", "panda", "polar", "red"].map((kind, i) => {
+    const model = bear({ name: "", appearance: { bear: kind, color: ["mint", "pink", "blue", "yellow"][i % 4], hat: ["none", "cap", "crown"][i % 3] } });
+    model.name.visible = false;
+    return model;
+  });
   function disposeTree(root) {
     root.traverse((o) => {
       o.geometry?.dispose();
@@ -553,6 +581,10 @@ export function createScene(canvas) {
         local.z += (p.z - local.z) * 0.3;
         local.y += (p.y - local.y) * 0.3;
         local.vy = p.vy;
+        local.emoteActive = p.emoteActive;
+        local.emoteName = p.emoteName;
+        local.emoteFacing = p.emoteFacing;
+        local.facing = p.facing;
         if ((p.launchedUntil || 0) > (local.launchedUntil || 0)) {
           local.vx = p.vx;
           local.vz = p.vz;
@@ -606,10 +638,50 @@ export function createScene(canvas) {
   }
   const angleDelta = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
   function frame(dt, time, input) {
+    const entrance = document.body.dataset.entrance === "true";
+    const reducedMotion = (userReducedMotion || matchMedia("(prefers-reduced-motion: reduce)").matches);
+    lobbyRoof.visible = !entrance && !!localId;
+    lobbyRafters.forEach(beam => beam.visible = lobbyRoof.visible);
+    entranceCast.forEach((model, i) => {
+      const visible = entrance && currentWorld === "lobby" && !snapshot?.players.some(player => player.connected);
+      model.root.visible = model.shadow.visible = visible;
+      if (!visible) return;
+      const clock = reducedMotion ? 0 : time;
+      const walking = i < 4;
+      const t = clock * 0.3 + i * 0.9;
+      const radius = 7 + i % 3 * 2;
+      const x = Math.sin(walking ? t : i * 1.3) * radius;
+      const z = Math.cos(walking ? t : i * 1.3) * radius;
+      const hop = walking ? Math.max(0, Math.sin(clock * 2.6 + i * 1.7)) * .8 : 0;
+      model.root.position.set(x, hop, z);
+      model.root.rotation.y = walking ? t + Math.PI / 2 : i * 1.3 + Math.PI;
+      model.shadow.position.set(x, .05, z);
+      model.rig.rotation.z = 0;
+      model.arms.forEach((arm, j) => {
+        arm.position.set(j ? .48 : -.48, 1, 0);
+        arm.rotation.set(walking ? Math.sin(clock * 7 + j * Math.PI + i) * .9 : 0, 0, 0);
+      });
+      model.feet.forEach((foot, j) => foot.rotation.x = walking ? Math.sin(clock * 7 + j * Math.PI + i) * .95 : 0);
+      if (!walking && !reducedMotion) {
+        if (i === 4 || i === 7) {
+          model.arms[1].position.set(.6, 1.27, .12);
+          model.arms[1].rotation.z = 2.6 + Math.sin(clock * 10) * .3;
+        } else if (i === 5) {
+          model.rig.rotation.z = Math.sin(clock * 4) * .18;
+          model.arms.forEach((arm, j) => { arm.rotation.z = (j ? -1 : 1) * (1 + Math.sin(clock * 4) * .4); });
+          model.root.position.y = Math.abs(Math.sin(clock * 4)) * .18;
+        } else {
+          model.arms[0].position.set(-.32, 1.42, .56);
+          model.arms[0].rotation.z = -1.5;
+          model.arms[1].position.set(.6, 1.15, .3);
+          model.arms[1].rotation.x = -1.2 + Math.sin(clock * 3) * .5;
+        }
+      }
+    });
     if (lounge.userData.board)
       lounge.userData.board.position.y =
         2.3 +
-        (matchMedia("(prefers-reduced-motion: reduce)").matches
+        ((userReducedMotion || matchMedia("(prefers-reduced-motion: reduce)").matches)
           ? 0
           : Math.sin(time * 1.1) * 0.07);
     if (snapshot) {
@@ -625,9 +697,15 @@ export function createScene(canvas) {
         );
       const live = new Set();
       for (const p of snapshot.players) {
-        if (!p.connected) continue;
+        if (!p.connected || (p.waitingLobby && snapshot.world !== "lobby") || (snapshot.activity && !p.waitingLobby)) continue;
         live.add(p.id);
         let b = bears.get(p.id);
+        if (b && b.appearanceKey !== JSON.stringify(p.appearance)) {
+          disposeTree(b.root); scene.remove(b.shadow);
+          b.shadow.geometry.dispose(); b.shadow.material.dispose();
+          b.avatarMaterials.forEach(m => {m.map?.dispose();m.dispose();});
+          bears.delete(p.id); b = null;
+        }
         if (!b) {
           b = bear(p);
           if (p.id === localId && currentWorld !== "arena1")
@@ -663,9 +741,9 @@ export function createScene(canvas) {
         if (b.opacity !== opacity) {
           b.opacity = opacity;
           b.avatarMaterials.forEach((m) => {
-            m.transparent = ghost;
+            m.transparent = ghost || m.userData.keepTransparency;
             m.opacity = opacity;
-            m.depthWrite = !ghost;
+            m.depthWrite = !ghost && m.userData.keepDepthWrite;
           });
           b.rig.traverse((o) => {
             if (o.isMesh) o.castShadow = !ghost;
@@ -709,6 +787,9 @@ export function createScene(canvas) {
           1 - b.squash + (airborne ? 0.035 : 0),
           1 + b.squash,
         );
+        b.rig.position.z = 0;
+        b.rig.rotation.x = 0;
+        b.feet.forEach(foot => foot.position.y = .36);
         b.rig.position.y =
           speed > 0.1 && !airborne
             ? Math.abs(Math.sin(b.gait)) * 0.055
@@ -717,6 +798,7 @@ export function createScene(canvas) {
           ? 0
           : Math.sin(b.gait) * Math.min(speed / 6, 1) * 0.055;
         b.arms.forEach((arm, i) => {
+          arm.rotation.order = "XYZ";
           arm.rotation.y = 0;
           arm.rotation.x = airborne
             ? -0.6
@@ -735,8 +817,8 @@ export function createScene(canvas) {
         });
         const emoteAge =
           p.emoteAge + Math.min((performance.now() - received) / 1000, 0.1);
-        if (currentWorld === "lobby" && emoteAge < 3 && speed < 0.2) {
-          const blend = Math.min(1, emoteAge / 0.3, (3 - emoteAge) / 0.4);
+        if (currentWorld === "lobby" && p.emoteName && (p.emoteActive || p.emoteFadeAge < .25) && (speed < 0.2 || p.emoteName === "griddy")) {
+          const blend = Math.min(1, emoteAge / 0.3) * (p.emoteActive ? 1 : Math.max(0, 1 - (p.emoteFadeAge + Math.min((performance.now() - received) / 1000, .1)) / .25));
           const ease = blend * blend * (3 - 2 * blend);
           if (p.emoteName === "wave") {
             const a = b.arms[1];
@@ -767,12 +849,32 @@ export function createScene(canvas) {
             right.rotation.x = (-Math.PI / 2) * ease;
             b.rig.rotation.z = Math.sin(emoteAge * 3) * 0.06 * ease;
           }
+          if (p.emoteName === "griddy") {
+            const cycle = (emoteAge % 1.4) / 1.4;
+            const eyes = Math.pow(Math.max(0, Math.sin(cycle * Math.PI * 2)), 2) * ease;
+            b.arms.forEach((arm, i) => {
+              const side = i ? 1 : -1;
+              arm.position.set(side * .48, 1 + .18 * ease, 0);
+              arm.rotation.order = "YXZ";
+              arm.rotation.y = -side * .65 * eyes;
+              arm.rotation.x = (.9 * (1 - eyes) - 2.35 * eyes) * ease;
+              arm.rotation.z = side * (-.45 * (1 - eyes) + .7 * eyes) * ease;
+              arm.scale.y = 1 + .7 * eyes;
+            });
+            b.feet.forEach((foot, i) => {
+              const step = Math.sin(emoteAge * 9 + i * Math.PI);
+              foot.rotation.x = step * .8 * ease;
+              foot.position.y = .36 + Math.max(0, step) * .16 * ease;
+            });
+            b.rig.position.y += Math.abs(Math.sin(emoteAge * 6)) * .1 * ease;
+            b.rig.rotation.x = .1 * ease;
+          }
           if (p.emoteName === "dance") {
-            b.rig.rotation.z = Math.sin(emoteAge * 10) * 0.17;
+            b.rig.rotation.z = Math.sin(emoteAge * 10) * 0.17 * ease;
             b.arms.forEach(
               (a, i) =>
                 (a.rotation.z =
-                  (i ? -1 : 1) * (0.8 + Math.sin(emoteAge * 10) * 0.25)),
+                  (i ? -1 : 1) * (0.8 + Math.sin(emoteAge * 10) * 0.25) * ease),
             );
           }
         }
@@ -797,12 +899,16 @@ export function createScene(canvas) {
           disposeTree(b.root);
           scene.remove(b.shadow);
           b.shadow.geometry.dispose();
-          b.avatarMaterials.forEach((m) => m.dispose());
+          b.avatarMaterials.forEach((m) => {m.map?.dispose();m.dispose();});
           b.shadow.material.dispose();
           bears.delete(id);
         }
       const following = local && mine?.connected ? local : null;
-      if (isParkour(currentWorld) && !localId) {
+      if (currentWorld === "lobby" && !localId) {
+        const angle = (userReducedMotion || matchMedia("(prefers-reduced-motion: reduce)").matches) ? 0.6 : performance.now() / 45000;
+        camera.position.set(Math.sin(angle) * 18, 12, Math.cos(angle) * 18);
+        camera.lookAt(0, 1, 0);
+      } else if (isParkour(currentWorld) && !localId) {
         camera.position.lerp(
           stageOf(currentWorld) >= 3
             ? new THREE.Vector3(0, 48, 46)
@@ -937,6 +1043,48 @@ export function createScene(canvas) {
   resize();
   addEventListener("resize", resize);
   return {
+    locker(canvas, appearance) {
+      const preview = new THREE.Scene();
+      const light = new THREE.HemisphereLight(0xffffff, 0x666080, 2.5);
+      preview.add(light);
+      const key = new THREE.DirectionalLight(0xffffff, 3);
+      key.position.set(3, 5, 5); preview.add(key);
+      const cam = new THREE.PerspectiveCamera(35, 1, 0.1, 20);
+      cam.position.set(0, 1.3, 4.0); cam.lookAt(0, 1.1, 0);
+      const output = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+      output.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+      let model, angle = 0, frameId;
+      const clear = () => {
+        if (!model) return;
+        preview.remove(model.root);
+        model.root.traverse(o => { if (o.isMesh) { o.geometry.dispose(); if (model.avatarMaterials.includes(o.material)) { o.material.map?.dispose(); o.material.dispose(); } } });
+      };
+      const change = a => {
+        clear(); model = bear({ appearance: a, name: "" });
+        scene.remove(model.shadow); model.shadow.geometry.dispose(); model.shadow.material.dispose();
+        model.root.remove(model.name); model.name.material.map?.dispose(); model.name.material.dispose(); model.name.geometry.dispose();
+        preview.add(model.root);
+      };
+      change(appearance);
+      let previousX, hovering = false, spinAngle = 0, previousTime = performance.now();
+      const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+      canvas.onpointerenter = () => { hovering = true; angle = 0; };
+      canvas.onpointerleave = () => { hovering = false; if (previousX === undefined) angle = spinAngle; };
+      canvas.onkeydown = e => { if (["ArrowLeft", "ArrowRight"].includes(e.key)) { e.preventDefault(); hovering = true; angle += e.key === "ArrowLeft" ? -0.2 : 0.2; } };
+      canvas.onpointerdown = e => { hovering = true; previousX = e.clientX; canvas.setPointerCapture(e.pointerId); };
+      canvas.onpointermove = e => { if (previousX !== undefined) { angle += (e.clientX - previousX) * 0.015; previousX = e.clientX; } };
+      canvas.onpointerup = canvas.onpointercancel = () => { previousX = undefined; hovering = canvas.matches(":hover"); if (!hovering) angle = spinAngle; };
+      const draw = () => {
+        const now = performance.now();
+        if (!hovering && previousX === undefined && !reduced.matches && !userReducedMotion) { spinAngle += Math.min((now - previousTime) / 1000, 0.1) * 0.65; angle = spinAngle; }
+        previousTime = now;
+        const width = canvas.clientWidth, height = canvas.clientHeight;
+        output.setSize(width, height, false); cam.aspect = width / height; cam.updateProjectionMatrix();
+        model.root.rotation.y = angle; output.render(preview, cam); frameId = requestAnimationFrame(draw);
+      };
+      draw();
+      return { change, dispose() { cancelAnimationFrame(frameId); clear(); output.dispose(); } };
+    },
     async ready() {
       await environmentAssetsReady();
       await new Promise((resolve) =>
@@ -975,6 +1123,8 @@ export function createScene(canvas) {
         z: Math.cos(yaw) * forward + Math.sin(yaw) * side,
       };
     },
+    listenerYaw() { return yaw; },
+    setMotion(value) { userReducedMotion = value; },
     setQuality(value) {
       low = value;
       renderer.setPixelRatio(low ? 1 : Math.min(devicePixelRatio, 1.5));

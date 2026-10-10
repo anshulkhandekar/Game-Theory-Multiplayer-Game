@@ -1,3 +1,4 @@
+import { normalizeAppearance } from "../shared/wardrobe.js";
 import { randomUUID } from "node:crypto";
 import { vaultsFor, insideVault, STAGES } from "../shared/world.js";
 import { appropriateText } from "./moderation.js";
@@ -40,6 +41,7 @@ export class Game {
     this.world = "lobby";
     this.stage = 1;
     this.worldTime = 0;
+    this.lobbyTime = 0;
     this.phase = "lobby";
     this.round = 0;
     this.scoredRound = saved?.scoredRound || 0;
@@ -52,7 +54,7 @@ export class Game {
     this.rewardPools = { bronze: 120, gold: 240, diamond: 360, sky: 480 };
     this.vaults = VAULTS.map((v) => ({ ...v }));
   }
-  join(id, name, appearance = {}) {
+  join(id, name, appearance = {}, connection = null) {
     let p = [...this.players.values()].find((p) => p.token === id);
     if (!p) {
       p = {
@@ -70,7 +72,24 @@ export class Game {
       };
       this.players.set(p.id, p);
     }
+    if (p.kicked) throw Error("Removed by the host. Ask the host to allow you back.");
+    if (connection) {
+      const resume = connection.pageId === p.pageId && connection.resume === true;
+      if (!resume && this.world !== "lobby" && this.phase !== "loading") {
+        p.waitingLobby = true;
+        p.eligible = false;
+        p.x = p.z = p.y = p.vx = p.vy = p.vz = 0;
+        p.grounded = true;
+        p.support = null;
+        p.jumpHeld = false;
+        p.hazardCooldown = p.padCooldown = p.launchedUntil = 0;
+        p.emoteAt = undefined;
+        p.emoteActive = false;
+      }
+      p.pageId = connection.pageId;
+    }
     if (!p.connected && this.phase === "lobby") {
+      p.waitingLobby = false;
       const a =
         [...this.players.values()].findIndex((player) => player.id === p.id) *
         2.4;
@@ -85,7 +104,7 @@ export class Game {
       p.vx = p.vy = p.vz = 0;
       p.grounded = true;
     }
-    if (this.phase === "loading" && !p.eligible) {
+    if (this.phase === "loading" && !p.eligible && !p.waitingLobby) {
       const angle =
         [...this.players.values()].findIndex((other) => other.id === p.id) *
         2.4;
@@ -116,8 +135,8 @@ export class Game {
   }
   chat(p, text) {
     if (
-      this.world !== "lobby" ||
-      !["lobby", "ready", "instructions"].includes(this.phase)
+      !p.waitingLobby && (this.world !== "lobby" ||
+      !["lobby", "ready", "instructions"].includes(this.phase))
     )
       throw Error("Chat is available in the lobby");
     if (typeof text !== "string") throw Error("Invalid message");
@@ -133,12 +152,20 @@ export class Game {
     this.message(p, "chat", clean);
   }
   emote(p, emote) {
-    if (this.world !== "lobby" || !["wave", "dance", "scuba"].includes(emote))
+    if ((!p.waitingLobby && this.world !== "lobby") || !["wave", "dance", "scuba", "griddy"].includes(emote))
       throw Error("Invalid lobby emote");
     if (p.emoteAt !== undefined && this.now() - p.emoteAt < 2500)
       throw Error("Wait before another emote");
     p.emoteAt = this.now();
     p.emoteName = emote;
+    p.emoteActive = true;
+    p.emoteFacing = p.facing ?? Math.PI;
+    p.emoteStoppedAt = undefined;
+  }
+  stopEmote(p) {
+    if (!p.emoteActive) return;
+    p.emoteActive = false;
+    p.emoteStoppedAt = this.now();
   }
   name(s) {
     const clean =
@@ -153,22 +180,12 @@ export class Game {
     appropriateText(clean);
     return clean;
   }
-  appearance(a) {
-    return {
-      bear: ["panda", "polar", "brown", "black"].includes(a.bear)
-        ? a.bear
-        : "brown",
-      color: ["mint", "pink", "blue", "yellow"].includes(a.color)
-        ? a.color
-        : "mint",
-      hat: ["none", "cap", "crown"].includes(a.hat) ? a.hat : "none",
-    };
-  }
+  appearance(a) { return normalizeAppearance(a); }
   acknowledgeLoad(p, round, continueRequested = false) {
     if (!Number.isInteger(round) || round !== this.round)
       throw Error("Loading acknowledgement is out of date");
     if (!(
-      this.world === "lobby" || ["loading", "countdown"].includes(this.phase)
+      p.waitingLobby || this.world === "lobby" || ["loading", "countdown"].includes(this.phase)
     ))
       throw Error("Loading is unavailable");
     if (continueRequested) {
@@ -176,7 +193,33 @@ export class Game {
       p.loaded = true;
     } else p.sceneLoaded = true;
   }
+  sendToLobby(p) {
+    this.stopEmote(p);
+    Object.assign(p, {waitingLobby: this.world !== "lobby", eligible: false, ready: false,
+      x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, grounded: true, support: null,
+      input: {}, jumpHeld: false, hazardCooldown: 0, padCooldown: 0, launchedUntil: 0});
+  }
   command(action, data = {}) {
+    if (["playerLobby", "disconnectPlayer", "kickPlayer", "allowPlayer"].includes(action)) {
+      const p = this.players.get(data.id);
+      if (!p) throw Error("Player no longer exists");
+      if (action === "allowPlayer") { p.kicked = false; return; }
+      this.sendToLobby(p);
+      if (action !== "playerLobby") p.connected = false;
+      if (action === "kickPlayer") p.kicked = true;
+      return;
+    }
+    if (action === "forceCountdown" && this.phase === "loading") {
+      if (this.paused) throw Error("Resume before starting the countdown");
+      for (const p of this.players.values()) {
+        if (!p.connected || !p.eligible) continue;
+        if (p.sceneLoaded) p.loaded = true;
+        else this.sendToLobby(p);
+      }
+      this.phase = "countdown";
+      this.deadline = this.now() + 8000;
+      return;
+    }
     if (action === "countdown" && this.phase === "loading") {
       if (this.paused) throw Error("Resume before starting the countdown");
       const players = [...this.players.values()].filter(
@@ -209,6 +252,8 @@ export class Game {
       this.phase = "lobby";
       this.paused = false;
       for (const p of this.players.values()) {
+        this.stopEmote(p);
+        p.waitingLobby = false;
         p.eligible = false;
         p.ready = false;
         p.x = 0;
@@ -330,6 +375,8 @@ export class Game {
       p.vx = 0;
       p.vz = 0;
       p.jumpHeld = false;
+      this.stopEmote(p);
+      p.waitingLobby = false;
       p.eligible = true;
       p.sceneLoaded = false;
       p.loaded = false;
@@ -377,6 +424,10 @@ export class Game {
   }
   tick(dt) {
     if (this.paused) return;
+    this.lobbyTime += dt;
+    for (const p of this.players.values()) {
+      if (p.connected && p.waitingLobby) move(p, p.input || {}, dt, "lobby", this.lobbyTime);
+    }
     if (this.phase === "countdown" && this.now() >= this.deadline) {
       this.phase = this.practice ? "practice" : "active";
       this.deadline =
@@ -399,7 +450,7 @@ export class Game {
     this.worldTime += dt;
     for (const p of this.players.values()) {
       if (
-        !p.connected ||
+        !p.connected || p.waitingLobby ||
         (["active", "practice"].includes(this.phase) && !p.eligible)
       )
         continue;
@@ -421,6 +472,13 @@ export class Game {
           this.message(p, "event", `entered the ${zone} vault`);
       }
     }
+  }
+  snapshotFor(playerId) {
+    const state = this.snapshot();
+    if (!this.players.get(playerId)?.waitingLobby) return state;
+    return { ...state, activity: { phase: state.phase, remaining: state.remaining, stage: state.stage, paused: state.paused },
+      phase: "lobby", world: "lobby", worldTime: this.lobbyTime, vaults: [], occupancy: {}, results: [],
+      messages: this.messages.filter(m => m.kind === "chat") };
   }
   snapshot() {
     return {
@@ -445,9 +503,10 @@ export class Game {
         this.world === "lobby" ? m.kind === "chat" : m.kind === "event",
       ),
       players: [...this.players.values()].map(
-        ({ input, jumpHeld, token, ...p }) => ({
+        ({ input, jumpHeld, token, pageId, ...p }) => ({
           ...p,
           zone: this.zone(p),
+          emoteFadeAge: (this.now() - (p.emoteStoppedAt ?? -10000)) / 1000,
           emoteAge: (this.now() - (p.emoteAt ?? -10000)) / 1000,
         }),
       ),
@@ -456,7 +515,7 @@ export class Game {
   save() {
     return {
       scoredRound: this.scoredRound,
-      players: [...this.players.values()].map(({ input, vy, ...p }) => p),
+      players: [...this.players.values()].map(({ input, vy, pageId, ...p }) => p),
     };
   }
 }
