@@ -1,8 +1,11 @@
+import { createBattlefieldAudio } from "./battlefield-audio.js";
+import { EMOTE_SECONDS } from "../shared/emotes.js";
 import { platforms, practicePlatforms, hazards, practiceHazards, stageOf, isParkour } from "../shared/world.js";
 import { audibleStructures, soundDistance } from "../shared/sound.js";
 // Audio unlocks on the first user gesture; saved mute preference wins over defaults.
 export function createAudio() {
   let context, enabled = localStorage.getItem('bear-muted') !== 'true';
+  let remoteEnabled = localStorage.getItem("bear-remote-muted") !== "true";
   let activeKey = '', generation = 0, timer, voices = new Set(), desired;
   const buffers = new Map(), remoteChannels = new Map();
   const motors = new Map(), hazardStates = new Map();
@@ -19,9 +22,9 @@ export function createAudio() {
     if (!enabled || context?.state !== "running") return;
     const source=context.createBufferSource(), filter=context.createBiquadFilter(), gain=context.createGain(), panner=context.createStereoPanner();
     source.buffer=noise(); filter.type=kind==="spike"?"bandpass":"lowpass";
-    const t=context.currentTime, duration=kind==="spike"?.18:kind==="fall"?.2:.11;
-    filter.frequency.setValueAtTime(kind==="spike"?2400:650,t);
-    filter.frequency.exponentialRampToValueAtTime(kind==="spike"?900:130,t+duration);
+    const t=context.currentTime, duration=kind==="explosion"?.65:kind==="gun"?.065:kind==="spike"?.18:kind==="fall"?.2:.11;
+    filter.frequency.setValueAtTime(kind==="gun"?3400:kind==="explosion"?380:kind==="spike"?2400:650,t);
+    filter.frequency.exponentialRampToValueAtTime(kind==="gun"?600:kind==="explosion"?45:kind==="spike"?900:130,t+duration);
     gain.gain.setValueAtTime(volume,t);gain.gain.exponentialRampToValueAtTime(.0001,t+duration);
     panner.pan.value=pan;source.connect(filter);filter.connect(gain);gain.connect(panner);panner.connect(context.destination);
     source.start();source.stop(t+duration);
@@ -63,6 +66,8 @@ export function createAudio() {
       }
     }
   }
+  const battleAudio=createBattlefieldAudio({context:()=>context,enabled:()=>enabled,noise,cue});
+  function battlefield(state,player,yaw=0){battleAudio.update(state,player,yaw);}
   function stopRemote(id) {
     const channel = remoteChannels.get(id);
     if (!channel) return;
@@ -74,38 +79,42 @@ export function createAudio() {
   }
   function remoteEmotes(state, listener, ownId, yaw = 0) {
     const wanted = new Set();
-    if (enabled && context?.state === "running" && state?.world === "lobby" && listener?.connected && !state.paused) {
+    if (enabled && remoteEnabled && context?.state === "running" && state && listener?.connected && !state.paused) {
       for (const p of state.players) {
         if (p.id === ownId || !p.connected || !p.emoteActive || !!p.waitingLobby !== !!listener.waitingLobby) continue;
         const distance = Math.hypot(p.x-listener.x, p.z-listener.z, (p.y||0)-(listener.y||0));
-        if (distance >= 55) continue;
+        if (distance >= 24) continue;
         wanted.add(p.id);
         const key = `${p.emoteName}:${p.emoteAt}`;
         let channel = remoteChannels.get(p.id);
         if (channel?.key !== key) {
           stopRemote(p.id);
-          const gain = context.createGain(), pan = context.createStereoPanner();
+          const gain = context.createGain(), pan = context.createPanner();
+          pan.panningModel = "HRTF"; pan.rolloffFactor = 0;
           gain.gain.value = 0; gain.connect(pan); pan.connect(context.destination);
           channel = {key, gain, pan, sources: new Set(), cancelled: false};
           remoteChannels.set(p.id, channel);
-          const current = channel;
+          const current = channel, requestedAt = performance.now();
           if (!buffers.has(p.emoteName)) buffers.set(p.emoteName, fetch(`/audio/${p.emoteName}.mp3`).then(r => {if (!r.ok) throw Error("Audio unavailable"); return r.arrayBuffer();}).then(b => context.decodeAudioData(b)));
           buffers.get(p.emoteName).then(buffer => {
-            const loop = () => {
-              if (current.cancelled) return;
-              const source = context.createBufferSource(), envelope = context.createGain();
-              source.buffer = buffer; source.connect(envelope); envelope.connect(gain);
-              const t = context.currentTime, fade = Math.min(.12, buffer.duration/4);
-              envelope.gain.setValueAtTime(0,t); envelope.gain.linearRampToValueAtTime(1,t+fade);
-              envelope.gain.setValueAtTime(1,t+buffer.duration-fade); envelope.gain.linearRampToValueAtTime(0,t+buffer.duration);
-              current.sources.add(source); source.start();
-              source.onended = () => {current.sources.delete(source); source.disconnect(); envelope.disconnect();};
-              current.timer = setTimeout(loop, (p.emoteName === "wave" ? buffer.duration+2.2 : buffer.duration-fade)*1000);
-            }; loop();
+            if (current.cancelled) return;
+            const offset = Math.max(0, (p.emoteAge || 0) + (performance.now()-requestedAt)/1000);
+            const duration = Math.min(buffer.duration, EMOTE_SECONDS[p.emoteName]);
+            if (offset >= duration) return;
+            const source = context.createBufferSource(), envelope = context.createGain();
+            source.buffer = buffer; source.connect(envelope); envelope.connect(gain);
+            const t = context.currentTime, remaining = duration-offset, fade = Math.min(.1,remaining/3);
+            envelope.gain.setValueAtTime(0,t);envelope.gain.linearRampToValueAtTime(1,t+fade);
+            envelope.gain.setValueAtTime(1,t+remaining-fade);envelope.gain.linearRampToValueAtTime(0,t+remaining);
+            current.sources.add(source);source.start(t,offset,remaining);
+            source.onended = () => {current.sources.delete(source);source.disconnect();envelope.disconnect();};
           }).catch(() => {if (remoteChannels.get(p.id) === current) stopRemote(p.id); buffers.delete(p.emoteName);});
         }
-        channel.gain.gain.setTargetAtTime(.12 * Math.pow(1-distance/55, 2),context.currentTime,.1);
-        channel.pan.pan.setTargetAtTime(Math.max(-.85,Math.min(.85,((p.x-listener.x)*-Math.cos(yaw)+(p.z-listener.z)*Math.sin(yaw))/10)),context.currentTime,.1);
+        channel.gain.gain.setTargetAtTime(.035 * Math.pow(1-distance/24, 2),context.currentTime,.1);
+        const dx=p.x-listener.x, dz=p.z-listener.z;
+        channel.pan.positionX.setTargetAtTime(-dx*Math.cos(yaw)+dz*Math.sin(yaw),context.currentTime,.08);
+        channel.pan.positionY.setTargetAtTime((p.y||0)-(listener.y||0),context.currentTime,.08);
+        channel.pan.positionZ.setTargetAtTime(-dx*Math.sin(yaw)-dz*Math.cos(yaw),context.currentTime,.08);
       }
     }
     for (const id of remoteChannels.keys()) if (!wanted.has(id)) stopRemote(id);
@@ -150,32 +159,32 @@ export function createAudio() {
       try { voice.source.stop(t+.22); } catch {}
     }
   }
-  async function emote(name,key) {
-    desired = name ? {name,key} : null;
+  async function emote(name,key,age=0) {
+    desired = name ? {name,key,age} : null;
     if(!name || !enabled || context?.state!=='running') { if(activeKey)stop(); return; }
     if(activeKey===key) return;
-    stop(); activeKey=key; const run=generation;
+    stop(); activeKey=key; const run=generation, requestedAt=performance.now();
     try {
       if(!buffers.has(name)) buffers.set(name, fetch(`/audio/${name}.mp3`).then(r=>{if(!r.ok)throw Error('Audio unavailable');return r.arrayBuffer();}).then(b=>context.decodeAudioData(b)));
       const buffer=await buffers.get(name);
       if(run!==generation || !enabled)return;
-      const loop=()=>{
-        if(run!==generation || !enabled)return;
-        const source=context.createBufferSource(), gain=context.createGain();
-        source.buffer=buffer; source.connect(gain); gain.connect(context.destination);
-        const t=context.currentTime, fade=Math.min(.12,buffer.duration/4), end=t+buffer.duration;
-        gain.gain.setValueAtTime(0,t);gain.gain.linearRampToValueAtTime(.16,t+fade);
-        gain.gain.setValueAtTime(.16,end-fade);gain.gain.linearRampToValueAtTime(0,end);
-        const voice={source,gain}; voices.add(voice); source.start(t);
-        source.onended=()=>{voices.delete(voice);source.disconnect();gain.disconnect();};
-        timer=setTimeout(loop, name === "wave" ? (buffer.duration + 2.2) * 1000 : Math.max(100,(buffer.duration-fade)*1000));
-      };loop();
+      const duration=Math.min(buffer.duration,EMOTE_SECONDS[name]), offset=Math.max(0,age+(performance.now()-requestedAt)/1000);
+      if(offset>=duration)return;
+      const source=context.createBufferSource(), gain=context.createGain();
+      source.buffer=buffer; source.connect(gain); gain.connect(context.destination);
+      const t=context.currentTime, remaining=duration-offset, fade=Math.min(.1,remaining/3), end=t+remaining;
+      gain.gain.setValueAtTime(0,t);gain.gain.linearRampToValueAtTime(.09,t+fade);
+      gain.gain.setValueAtTime(.09,end-fade);gain.gain.linearRampToValueAtTime(0,end);
+      const voice={source,gain};voices.add(voice);source.start(t,offset,remaining);
+      source.onended=()=>{voices.delete(voice);source.disconnect();gain.disconnect();};
     }catch {buffers.delete(name);if(run===generation)activeKey='';}
   }
   return {
-    cue, unlock, emote, stop, environment, impact, remoteEmotes,
+    cue, unlock, emote, stop, environment, impact, remoteEmotes, battlefield,
     get enabled(){return enabled;},
+    get remoteEnabled(){return remoteEnabled;},
+    toggleRemote(){remoteEnabled=!remoteEnabled;localStorage.setItem("bear-remote-muted",String(!remoteEnabled));if(!remoteEnabled)for(const id of remoteChannels.keys())stopRemote(id);return remoteEnabled;},
     async toggle(){ enabled=!enabled;localStorage.setItem('bear-muted',String(!enabled));
-      if(!enabled){stop();silenceEnvironment();for (const id of remoteChannels.keys()) stopRemote(id);}else {await unlock();if(desired)emote(desired.name,desired.key);}return enabled; },
+      if(!enabled){battleAudio.stop();stop();silenceEnvironment();for (const id of remoteChannels.keys()) stopRemote(id);}else {await unlock();if(desired)emote(desired.name,desired.key,desired.age);}return enabled; },
   };
 }

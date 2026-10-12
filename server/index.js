@@ -3,6 +3,8 @@ import { createServer } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import { timingSafeEqual, randomBytes } from "node:crypto";
 import fs from "node:fs";
+import { TrafficBudget, MAX_QUEUED_BYTES } from "./traffic.js";
+import { performance, monitorEventLoopDelay } from "node:perf_hooks";
 import { Game } from "./game.js";
 const port = Number(process.env.PORT || 3000),
   hostKey = process.env.HOST_KEY || randomBytes(18).toString("hex");
@@ -15,7 +17,18 @@ try {
 const game = new Game({ saved });
 const app = express();
 const server = createServer(app);
-const wss = new WebSocketServer({ server, maxPayload: 4096 });
+const wss = new WebSocketServer({
+  server,
+  maxPayload: 4096,
+  // Frames are repetitive JSON. Bound compression work and avoid per-client retained contexts.
+  perMessageDeflate: {
+    threshold: 1024,
+    concurrencyLimit: 4,
+    serverNoContextTakeover: true,
+    clientNoContextTakeover: true,
+    zlibDeflateOptions: { level: 1 },
+  },
+});
 if (process.env.NODE_ENV === "production") app.use(express.static("dist"));
 else {
   const { createServer } = await import("vite");
@@ -25,13 +38,61 @@ else {
   });
   app.use(vite.middlewares);
 }
-const persist = () => {
+const flush = () => {
   fs.mkdirSync(file.slice(0, file.lastIndexOf("/")) || ".", {
     recursive: true,
   });
   fs.writeFileSync(file + ".tmp", JSON.stringify(game.save()));
   fs.renameSync(file + ".tmp", file);
 };
+let saveTimer;
+const persist = () => {
+  saveTimer ||= setTimeout(() => {
+    saveTimer = null;
+    flush();
+  }, 250);
+};
+const metrics = {
+  ticks: 0,
+  maxTickMs: 0,
+  tickMs: 0,
+  dropped: 0,
+  slowFrames: 0,
+  bytes: 0,
+};
+const delay = process.env.PERF_FILE
+  ? monitorEventLoopDelay({ resolution: 10 })
+  : null;
+delay?.enable();
+function send(ws, message) {
+  if (ws.readyState !== WebSocket.OPEN || ws.bufferedAmount > MAX_QUEUED_BYTES)
+    return;
+  ws.send(JSON.stringify(message));
+}
+process.on("SIGTERM", () => {
+  if (saveTimer) clearTimeout(saveTimer);
+  flush();
+  writeMetrics();
+  process.exit(0);
+});
+function writeMetrics() {
+  if (!process.env.PERF_FILE) return;
+  fs.writeFileSync(
+    process.env.PERF_FILE,
+    JSON.stringify(
+      {
+        ...metrics,
+        meanTickMs: metrics.tickMs / Math.max(1, metrics.ticks),
+        eventLoopP99Ms: delay.percentile(99) / 1e6,
+        memory: process.memoryUsage(),
+        cpu: process.cpuUsage(),
+      },
+      null,
+      2,
+    ),
+  );
+}
+if (delay) setInterval(writeMetrics, 5000).unref();
 const equal = (a, b) => {
   const x = Buffer.from(String(a || "")),
     y = Buffer.from(b);
@@ -41,27 +102,40 @@ wss.on("connection", (ws) => {
   ws.alive = true;
   ws.on("pong", () => (ws.alive = true));
   ws.send(JSON.stringify({ type: "state", state: game.snapshot() }));
-  let count = 0,
-    last = Date.now();
+  const traffic = new TrafficBudget();
+  ws.on("error", () => {});
   ws.on("message", (raw) => {
+    if (ws.readyState !== WebSocket.OPEN) return;
     try {
-      if (Date.now() - last > 1000) {
-        count = 0;
-        last = Date.now();
+      // Payloads are capped at 4KB and abusive sockets close after a bounded burst.
+      // Classify the parsed envelope, so a nested "type: input" cannot disguise purchases.
+      let m;
+      try {
+        m = JSON.parse(raw);
+      } catch {
+        m = null;
       }
-      if (++count > 80) throw Error("Too many requests");
-      const m = JSON.parse(raw);
+      if (!traffic.accept(m?.type === "input" ? "input" : "action")) {
+        metrics.dropped++;
+        if (traffic.abusive) ws.close(4008, "Too many requests");
+        return;
+      }
+      if (!m || typeof m !== "object") throw Error("Invalid request");
       if (m.type === "hostAuth") {
         ws.host = equal(m.key, hostKey);
-        ws.send(JSON.stringify({ type: "auth", ok: ws.host }));
+        send(ws, { type: "auth", ok: ws.host });
         return;
       }
       if (m.type === "host") {
         if (!ws.host) throw Error("Unauthorized host action");
         game.command(m.action, m.data);
         if (["disconnectPlayer", "kickPlayer"].includes(m.action))
-          for (const client of wss.clients) if (client.player === m.data?.id)
-            client.close(m.action === "kickPlayer" ? 4002 : 4001, "Removed by host");
+          for (const client of wss.clients)
+            if (client.player === m.data?.id)
+              client.close(
+                m.action === "kickPlayer" ? 4002 : 4001,
+                "Removed by host",
+              );
         persist();
         return;
       }
@@ -73,7 +147,13 @@ wss.on("connection", (ws) => {
           typeof m.id === "string" ? m.id : null,
           m.name,
           m.appearance,
-          { pageId: typeof m.pageId === "string" && /^[a-f0-9-]{36}$/i.test(m.pageId) ? m.pageId : randomBytes(18).toString("hex"), resume: m.resume === true },
+          {
+            pageId:
+              typeof m.pageId === "string" && /^[a-f0-9-]{36}$/i.test(m.pageId)
+                ? m.pageId
+                : randomBytes(18).toString("hex"),
+            resume: m.resume === true,
+          },
         );
         p.name = game.name(m.name);
         p.appearance = game.appearance(m.appearance || {});
@@ -82,13 +162,26 @@ wss.on("connection", (ws) => {
             old.player = null;
             old.close(4000, "Session opened elsewhere");
           }
+        p.inputSequence = p.inputAck = 0;
         ws.player = p.id;
-        ws.send(JSON.stringify({ type: "identity", id: p.id, token: p.token }));
+        send(ws, { type: "identity", id: p.id, token: p.token });
         persist();
         return;
       }
-      const p = game.players.get(ws.player);
-      if (!p) throw Error("Join first");
+      const p = game.players.get(
+        ws.host && game.battlefield?.demo
+          ? game.battlefield.demo.pilot
+          : ws.player,
+      );
+      if (!p) {
+        if (ws.host && m.type === "input") return;
+        throw Error("Join first");
+      }
+      if (m.type === "battle") {
+        if (!game.battlefield) throw Error("Battlefield is unavailable");
+        const receipt = game.battlefield.act(p.id, m.action, m.data);
+        if (receipt) send(ws, { type: "battleAck", receipt });
+      }
       if (m.type === "sceneLoaded") game.acknowledgeLoad(p, m.round);
       if (m.type === "loadReady") game.acknowledgeLoad(p, m.round, true);
       if (m.type === "chat") game.chat(p, m.text);
@@ -102,12 +195,19 @@ wss.on("connection", (ws) => {
           Math.abs(m.z) > 1
         )
           throw Error("Invalid input");
+        if (m.seq !== undefined) {
+          if (!Number.isSafeInteger(m.seq) || m.seq < 1)
+            throw Error("Invalid input sequence");
+          if (m.seq <= (p.inputSequence || 0)) return;
+          p.inputSequence = m.seq;
+        }
         if (m.x || m.z || m.jump) game.stopEmote(p);
         p.input = { x: m.x, z: m.z, jump: !!m.jump };
         p.lastInput = Date.now();
       }
     } catch (e) {
-      ws.send(JSON.stringify({ type: "error", message: e.message }));
+      if (traffic.reportError())
+        send(ws, { type: "error", message: e.message });
     }
   });
   ws.on("close", () => {
@@ -121,20 +221,50 @@ wss.on("connection", (ws) => {
   });
 });
 let previous = Date.now(),
-  lastPhase = game.phase;
+  lastPhase = game.phase,
+  lastBattleSerial = game.battlefieldSerial;
 setInterval(() => {
+  const started = performance.now();
   const now = Date.now();
   for (const p of game.players.values())
-    if (now - (p.lastInput || 0) > 250) p.input = {};
+    if (now - (p.lastInput || 0) > 1000) p.input = {};
   game.tick(Math.min((now - previous) / 1000, 0.1));
   previous = now;
-  if (game.phase !== lastPhase) {
-    persist();
+  if (game.phase !== lastPhase || game.battlefieldSerial !== lastBattleSerial) {
+    lastBattleSerial = game.battlefieldSerial;
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    flush();
     lastPhase = game.phase;
   }
-  const payload = JSON.stringify({ type: "state", state: game.snapshot() });
-  for (const ws of wss.clients)
-    if (ws.readyState === WebSocket.OPEN) ws.send(ws.player ? JSON.stringify({ type: "state", state: game.snapshotFor(ws.player) }) : payload);
+  const base = game.snapshot();
+  const payload = JSON.stringify({ type: "state", state: base });
+  for (const ws of wss.clients) {
+    if (ws.readyState !== WebSocket.OPEN) continue;
+    if (ws.bufferedAmount > MAX_QUEUED_BYTES) {
+      metrics.slowFrames++;
+      ws.slowSince ||= now;
+      if (now - ws.slowSince > 5000)
+        ws.close(4009, "Connection too slow; reconnect");
+      continue;
+    }
+    ws.slowSince = 0;
+    const actor =
+      ws.host && game.battlefield?.demo
+        ? game.battlefield.demo.pilot
+        : ws.player;
+    const data = actor
+      ? JSON.stringify({ type: "state", state: game.snapshotFor(actor, base) })
+      : payload;
+    ws.send(data);
+    metrics.bytes += Buffer.byteLength(data);
+  }
+  const took = performance.now() - started;
+  metrics.ticks++;
+  metrics.tickMs += took;
+  metrics.maxTickMs = Math.max(metrics.maxTickMs, took);
 }, 50);
 setInterval(() => {
   for (const ws of wss.clients) {

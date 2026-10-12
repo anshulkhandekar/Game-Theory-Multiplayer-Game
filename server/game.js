@@ -1,3 +1,6 @@
+import { teamPlan } from "../shared/battlefield.js";
+import { Battlefield } from "./battlefield.js";
+import { EMOTE_SECONDS, canEmote } from "../shared/emotes.js";
 import { normalizeAppearance } from "../shared/wardrobe.js";
 import { randomUUID } from "node:crypto";
 import { vaultsFor, insideVault, STAGES } from "../shared/world.js";
@@ -23,12 +26,14 @@ export class Game {
     saved,
   } = {}) {
     this.now = now;
+    this.battlefield = null;
+    this.battlefieldSerial = 0;
     this.duration = duration;
     this.practiceDuration = practiceDuration;
     this.players = new Map(
       saved?.players?.map((p) => [
         p.id,
-        { ...p, connected: false, input: {}, ready: false },
+        { ...p, connected: false, input: {}, ready: false, emoteActive: false },
       ]) || [],
     );
     for (const p of this.players.values()) {
@@ -48,6 +53,7 @@ export class Game {
     this.paused = false;
     this.deadline = 0;
     this.results = [];
+    this.leaderboardSerial ??= 0;
     this.messages = [];
     this.messageSerial = 0;
     this.practice = false;
@@ -72,10 +78,17 @@ export class Game {
       };
       this.players.set(p.id, p);
     }
-    if (p.kicked) throw Error("Removed by the host. Ask the host to allow you back.");
+    if (p.kicked)
+      throw Error("Removed by the host. Ask the host to allow you back.");
     if (connection) {
-      const resume = connection.pageId === p.pageId && connection.resume === true;
-      if (!resume && this.world !== "lobby" && this.phase !== "loading") {
+      const resume =
+        connection.pageId === p.pageId && connection.resume === true;
+      if (
+        !resume &&
+        !this.battlefield?.teamOf(p.id) &&
+        this.world !== "lobby" &&
+        this.phase !== "loading"
+      ) {
         p.waitingLobby = true;
         p.eligible = false;
         p.x = p.z = p.y = p.vx = p.vy = p.vz = 0;
@@ -119,7 +132,29 @@ export class Game {
     }
     p.sceneLoaded = false;
     p.loaded = false;
+    if (
+      this.battlefield &&
+      this.battlefield.phase !== "matching" &&
+      !this.battlefield.teamOf(p.id)
+    ) {
+      p.waitingLobby = true;
+      p.eligible = false;
+    }
+    if (this.battlefield?.demo && !p.demo) {
+      p.waitingLobby = true;
+      p.eligible = false;
+    }
     p.connected = true;
+    if (this.battlefield?.phase === "matching" && !this.battlefield.demo) {
+      if (
+        !this.battlefield.roster.includes(p.id) &&
+        this.battlefield.roster.length < 40
+      ) {
+        this.battlefield.roster.push(p.id);
+        this.battlefield.requests.set(p.id, []);
+      }
+      p.waitingLobby = !this.battlefield.roster.includes(p.id);
+    }
     p.input = {};
     return p;
   }
@@ -135,8 +170,9 @@ export class Game {
   }
   chat(p, text) {
     if (
-      !p.waitingLobby && (this.world !== "lobby" ||
-      !["lobby", "ready", "instructions"].includes(this.phase))
+      !p.waitingLobby &&
+      (this.world !== "lobby" ||
+        !["lobby", "ready", "instructions"].includes(this.phase))
     )
       throw Error("Chat is available in the lobby");
     if (typeof text !== "string") throw Error("Invalid message");
@@ -152,12 +188,14 @@ export class Game {
     this.message(p, "chat", clean);
   }
   emote(p, emote) {
-    if ((!p.waitingLobby && this.world !== "lobby") || !["wave", "dance", "scuba", "griddy"].includes(emote))
-      throw Error("Invalid lobby emote");
+    if (this.battlefield?.paused) throw Error("Emotes are paused");
+    if (!canEmote(this, p) || !Object.hasOwn(EMOTE_SECONDS, emote))
+      throw Error("Invalid emote for this phase");
     if (p.emoteAt !== undefined && this.now() - p.emoteAt < 2500)
       throw Error("Wait before another emote");
     p.emoteAt = this.now();
     p.emoteName = emote;
+    p.emoteEndsAt = this.now() + EMOTE_SECONDS[emote] * 1000;
     p.emoteActive = true;
     p.emoteFacing = p.facing ?? Math.PI;
     p.emoteStoppedAt = undefined;
@@ -180,12 +218,16 @@ export class Game {
     appropriateText(clean);
     return clean;
   }
-  appearance(a) { return normalizeAppearance(a); }
+  appearance(a) {
+    return normalizeAppearance(a);
+  }
   acknowledgeLoad(p, round, continueRequested = false) {
     if (!Number.isInteger(round) || round !== this.round)
       throw Error("Loading acknowledgement is out of date");
     if (!(
-      p.waitingLobby || this.world === "lobby" || ["loading", "countdown"].includes(this.phase)
+      p.waitingLobby ||
+      this.world === "lobby" ||
+      ["loading", "countdown"].includes(this.phase)
     ))
       throw Error("Loading is unavailable");
     if (continueRequested) {
@@ -195,16 +237,108 @@ export class Game {
   }
   sendToLobby(p) {
     this.stopEmote(p);
-    Object.assign(p, {waitingLobby: this.world !== "lobby", eligible: false, ready: false,
-      x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, grounded: true, support: null,
-      input: {}, jumpHeld: false, hazardCooldown: 0, padCooldown: 0, launchedUntil: 0});
+    Object.assign(p, {
+      waitingLobby: this.world !== "lobby",
+      eligible: false,
+      ready: false,
+      x: 0,
+      y: 0,
+      z: 0,
+      vx: 0,
+      vy: 0,
+      vz: 0,
+      grounded: true,
+      support: null,
+      input: {},
+      jumpHeld: false,
+      hazardCooldown: 0,
+      padCooldown: 0,
+      launchedUntil: 0,
+    });
   }
   command(action, data = {}) {
-    if (["playerLobby", "disconnectPlayer", "kickPlayer", "allowPlayer"].includes(action)) {
+    if (["battlefield", "battlefieldDemo"].includes(action)) {
+      if (!["lobby", "results"].includes(this.phase))
+        throw Error("Finish the current activity first");
+      if (action === "battlefieldDemo")
+        teamPlan(data.count, data.preferred || 3);
+      else if (
+        [...this.players.values()].filter(
+          (p) => p.connected && !p.kicked && !p.demo,
+        ).length > 40
+      )
+        throw Error("Battlefield supports up to 40 participants");
+      else if (
+        [...this.players.values()].filter(
+          (p) => p.connected && !p.kicked && !p.demo,
+        ).length < 2
+      )
+        throw Error(
+          "Battlefield needs at least two players. Use solo demo to test",
+        );
+      this.command("lobby");
+      this.battlefield = new Battlefield(
+        this,
+        action === "battlefieldDemo"
+          ? { demoCount: data.count, preferred: data.preferred || 3 }
+          : {},
+      );
+      this.phase = "battlefield";
+      if (this.battlefield.demo) this.battlefield.formTeams();
+      for (const p of this.players.values()) {
+        this.stopEmote(p);
+        if (this.battlefield.demo && !p.demo) {
+          p.waitingLobby = true;
+          p.eligible = false;
+        }
+      }
+      return;
+    }
+    if (action.startsWith("battle:")) {
+      if (!this.battlefield || this.phase !== "battlefield")
+        throw Error("Start Battlefield first");
+      this.battlefield.command(action.slice(7), data);
+      return;
+    }
+    if (this.phase === "battlefield" && ["pause", "resume"].includes(action)) {
+      this.battlefield.command(action, data);
+      return;
+    }
+    if (
+      this.phase === "battlefield" &&
+      ![
+        "lobby",
+        "leaderboard",
+        "playerLobby",
+        "disconnectPlayer",
+        "kickPlayer",
+        "allowPlayer",
+      ].includes(action)
+    )
+      throw Error("Use the Battlefield controls");
+    if (action === "leaderboard") {
+      this.leaderboardSerial++;
+      return;
+    }
+    if (
+      ["playerLobby", "disconnectPlayer", "kickPlayer", "allowPlayer"].includes(
+        action,
+      )
+    ) {
       const p = this.players.get(data.id);
       if (!p) throw Error("Player no longer exists");
-      if (action === "allowPlayer") { p.kicked = false; return; }
+      if (action === "allowPlayer") {
+        p.kicked = false;
+        return;
+      }
       this.sendToLobby(p);
+      if (this.battlefield) {
+        p.waitingLobby = true;
+        if (this.battlefield.phase === "matching")
+          this.battlefield.roster = this.battlefield.roster.filter(
+            (id) => id !== p.id,
+          );
+      }
       if (action !== "playerLobby") p.connected = false;
       if (action === "kickPlayer") p.kicked = true;
       return;
@@ -248,6 +382,8 @@ export class Game {
       return;
     }
     if (action === "lobby") {
+      for (const [id, p] of this.players) if (p.demo) this.players.delete(id);
+      this.battlefield = null;
       this.world = "lobby";
       this.phase = "lobby";
       this.paused = false;
@@ -270,6 +406,7 @@ export class Game {
         p.padCooldown = 0;
         p.input = {};
       }
+      this.leaderboardSerial++;
       const connected = [...this.players.values()].filter((p) => p.connected);
       connected.forEach((p, i) => {
         const angle = (i / connected.length) * Math.PI * 2;
@@ -423,10 +560,57 @@ export class Game {
     this.deadline = 0;
   }
   tick(dt) {
+    if (this.phase === "battlefield" && this.battlefield) {
+      for (const p of this.players.values())
+        if (p.emoteActive && this.now() >= p.emoteEndsAt) this.stopEmote(p);
+      this.battlefield.tick();
+      this.world =
+        this.battlefield.phase === "matching"
+          ? "lobby"
+          : `battlefield${this.battlefield.round}`;
+      if (!this.battlefield.paused) {
+        this.worldTime += dt;
+        this.lobbyTime += dt;
+        for (const p of this.players.values())
+          if (p.connected) {
+            move(
+              p,
+              p.input || {},
+              dt,
+              p.waitingLobby ? "lobby" : this.world,
+              this.worldTime,
+              false,
+              this.battlefield,
+            );
+            p.inputAck = p.inputSequence || 0;
+          }
+      }
+      return;
+    }
+    for (const p of this.players.values())
+      if (p.emoteActive && this.now() >= p.emoteEndsAt) this.stopEmote(p);
+    for (const p of this.players.values())
+      if (
+        this.paused ||
+        (!p.waitingLobby &&
+          ![
+            "lobby",
+            "ready",
+            "instructions",
+            "loading",
+            "countdown",
+            "active",
+            "practice",
+          ].includes(this.phase))
+      )
+        p.inputAck = p.inputSequence || 0;
     if (this.paused) return;
     this.lobbyTime += dt;
     for (const p of this.players.values()) {
-      if (p.connected && p.waitingLobby) move(p, p.input || {}, dt, "lobby", this.lobbyTime);
+      if (p.connected && p.waitingLobby) {
+        move(p, p.input || {}, dt, "lobby", this.lobbyTime);
+        p.inputAck = p.inputSequence || 0;
+      }
     }
     if (this.phase === "countdown" && this.now() >= this.deadline) {
       this.phase = this.practice ? "practice" : "active";
@@ -442,22 +626,39 @@ export class Game {
       return;
     }
     if (
-      !["lobby", "ready", "instructions", "active", "practice"].includes(
-        this.phase,
-      )
+      ![
+        "lobby",
+        "ready",
+        "instructions",
+        "loading",
+        "countdown",
+        "active",
+        "practice",
+      ].includes(this.phase)
     )
       return;
-    this.worldTime += dt;
+    if (!["loading", "countdown"].includes(this.phase)) this.worldTime += dt;
     for (const p of this.players.values()) {
       if (
-        !p.connected || p.waitingLobby ||
+        !p.connected ||
+        p.waitingLobby ||
+        (["loading", "countdown"].includes(this.phase) &&
+          (!p.loaded || !p.eligible)) ||
         (["active", "practice"].includes(this.phase) && !p.eligible)
       )
         continue;
       const beforeZone = this.zone(p),
         beforeRespawns = p.respawns || 0,
         beforePunch = p.hazardCooldown || 0;
-      move(p, p.input || {}, dt, this.world, this.worldTime);
+      move(
+        p,
+        p.input || {},
+        dt,
+        this.world,
+        this.worldTime,
+        ["loading", "countdown"].includes(this.phase),
+      );
+      p.inputAck = p.inputSequence || 0;
       if (this.world !== "lobby") {
         if ((p.respawns || 0) > beforeRespawns)
           this.message(
@@ -473,16 +674,42 @@ export class Game {
       }
     }
   }
-  snapshotFor(playerId) {
-    const state = this.snapshot();
+  snapshotFor(playerId, publicState = this.snapshot()) {
+    const state = { ...publicState };
+    if (this.battlefield)
+      state.battlefield = this.battlefield.snapshot(
+        playerId,
+        publicState.battlefield,
+      );
+    const owner = this.players.get(playerId);
+    state.prediction = {
+      ack: owner?.inputAck || 0,
+      jumpHeld: !!owner?.jumpHeld,
+    };
     if (!this.players.get(playerId)?.waitingLobby) return state;
-    return { ...state, activity: { phase: state.phase, remaining: state.remaining, stage: state.stage, paused: state.paused },
-      phase: "lobby", world: "lobby", worldTime: this.lobbyTime, vaults: [], occupancy: {}, results: [],
-      messages: this.messages.filter(m => m.kind === "chat") };
+    return {
+      ...state,
+      activity: {
+        kind: this.battlefield ? "battlefield" : "crowd",
+        phase: state.phase,
+        remaining: state.remaining,
+        stage: state.stage,
+        paused: state.paused,
+      },
+      phase: "lobby",
+      world: "lobby",
+      worldTime: this.lobbyTime,
+      vaults: [],
+      occupancy: {},
+      results: [],
+      messages: this.messages.filter((m) => m.kind === "chat"),
+    };
   }
   snapshot() {
     return {
       phase: this.phase,
+      battlefield: this.battlefield?.snapshot() || null,
+      leaderboardSerial: this.leaderboardSerial,
       world: this.world,
       stage: this.stage,
       stageName: STAGES[this.stage - 1].name,
@@ -490,20 +717,28 @@ export class Game {
       round: this.round,
       scoredRound: this.scoredRound,
       practice: this.practice,
-      paused: this.paused,
+      paused: this.battlefield?.paused ?? this.paused,
       remaining: this.paused
         ? this.remaining / 1000
         : Math.max(0, (this.deadline - this.now()) / 1000),
       duration: this.duration,
       rewardPools: this.rewardPools,
-      vaults: this.vaults,
-      occupancy: this.occupancy(),
+      vaults: this.battlefield ? [] : this.vaults,
+      occupancy: this.battlefield ? {} : this.occupancy(),
       results: this.results,
       messages: this.messages.filter((m) =>
         this.world === "lobby" ? m.kind === "chat" : m.kind === "event",
       ),
       players: [...this.players.values()].map(
-        ({ input, jumpHeld, token, pageId, ...p }) => ({
+        ({
+          input,
+          jumpHeld,
+          inputSequence,
+          inputAck,
+          token,
+          pageId,
+          ...p
+        }) => ({
           ...p,
           zone: this.zone(p),
           emoteFadeAge: (this.now() - (p.emoteStoppedAt ?? -10000)) / 1000,
@@ -515,7 +750,9 @@ export class Game {
   save() {
     return {
       scoredRound: this.scoredRound,
-      players: [...this.players.values()].map(({ input, vy, pageId, ...p }) => p),
+      players: [...this.players.values()]
+        .filter((p) => !p.demo)
+        .map(({ input, vy, inputSequence, inputAck, pageId, ...p }) => p),
     };
   }
 }

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import {
+  arenaBounds,
   platforms,
   jumpPads,
   practicePlatforms,
@@ -29,6 +30,7 @@ function wallArt(parent, kind, w, h, x, y, z, angle = 0) {
       complete,
     );
   }
+  texture.userData.shared = true;
   texture.colorSpace = THREE.SRGBColorSpace;
   const art = new THREE.Mesh(
     new THREE.PlaneGeometry(w, h),
@@ -404,16 +406,17 @@ export function environmentTools({ mesh, ring, label }) {
     lounge.userData.practice = { platformMeshes, spikeMeshes };
     // Hall and gym are in world units; the circular lounge retains its original scale.
     mesh(
-      new THREE.BoxGeometry(6.4, 0.5, 12),
+      new THREE.BoxGeometry(10.4, 0.5, 12),
       "#536e79",
       0,
       -0.25,
       23,
       practice,
     );
-    for (const x of [-3.4, 3.4])
-      mesh(new THREE.BoxGeometry(0.3, 6, 12), "#446773", x, 3, 23, practice);
-    mesh(new THREE.BoxGeometry(6.8, 0.25, 12), "#698781", 0, 6, 23, practice);
+    mesh(new THREE.BoxGeometry(0.3, 6, 12), "#446773", -5.4, 3, 23, practice);
+    mesh(new THREE.BoxGeometry(0.3, 6, 6), "#446773", 5.4, 3, 20, practice);
+    mesh(new THREE.BoxGeometry(0.3, 1, 6), "#698781", 5.4, 5.5, 26, practice);
+    mesh(new THREE.BoxGeometry(10.8, 0.25, 12), "#698781", 0, 6, 23, practice);
     mesh(
       new THREE.BoxGeometry(24, 0.5, 33),
       "#536e79",
@@ -459,7 +462,7 @@ export function environmentTools({ mesh, ring, label }) {
     }
     hazardDecor(practice, practiceHazards(0), spikeMeshes);
     const practiceSign = lettering(
-      ["Practice hall", "Moving · flipping · shrinking"],
+      ["Game 1 · Crowd Rush practice", "Parkour hall"],
       5,
       1.4,
     );
@@ -674,10 +677,10 @@ export function environmentTools({ mesh, ring, label }) {
       parentPad.add(arrow);
     }
     vaultsFor(stage).forEach((v) => chambers.push(chamber(v, parent)));
-    const depth = stage === 5 ? 62 : stage === 4 ? 54 : 46;
-    const front = stage >= 3 ? 28 : 8;
+    const { side, front, rear } = arenaBounds(stage);
+    const depth = 7 - rear;
     mesh(
-      new THREE.BoxGeometry(80, 0.6, depth + front + 20),
+      new THREE.BoxGeometry(side * 2 + 12, 0.6, depth + front + 20),
       "#203644",
       0,
       -7.2,
@@ -685,7 +688,7 @@ export function environmentTools({ mesh, ring, label }) {
       parent,
     );
     // Solid perimeter buildings sit outside routes; their repeated ribs frame the arena.
-    for (const x of [-34, 34]) {
+    for (const x of [-side, side]) {
       mesh(
         new THREE.BoxGeometry(1, 28, depth + front),
         palette,
@@ -717,12 +720,18 @@ export function environmentTools({ mesh, ring, label }) {
       parent.add(hint);
     }
     if (stage >= 3)
-      mesh(new THREE.BoxGeometry(68, 20, 0.7), palette, 0, 3, front, parent);
-    wallArt(parent, "club-banner", 16, 3.67, 0, 10, -depth + 7.5);
-    wallArt(parent, "panda-logo", 4, 4, -33.3, 5, 15, Math.PI / 2);
-    wallArt(parent, "panda-logo", 3, 3, 33.3, 9, -26, -Math.PI / 2);
-    const rear = -depth + 7;
-    mesh(new THREE.BoxGeometry(68, 20, 0.7), palette, 0, 3, rear, parent);
+      mesh(
+        new THREE.BoxGeometry(side * 2, 20, 0.7),
+        palette,
+        0,
+        3,
+        front,
+        parent,
+      );
+    wallArt(parent, "club-banner", 16, 3.67, 0, 10, rear + 0.5);
+    wallArt(parent, "panda-logo", 4, 4, -side + 0.7, 5, 15, Math.PI / 2);
+    wallArt(parent, "panda-logo", 3, 3, side - 0.7, 9, -26, -Math.PI / 2);
+    mesh(new THREE.BoxGeometry(side * 2, 20, 0.7), palette, 0, 3, rear, parent);
     for (const x of [-24, -12, 0, 12, 24]) {
       mesh(
         new THREE.BoxGeometry(0.7, 20, 1.1),

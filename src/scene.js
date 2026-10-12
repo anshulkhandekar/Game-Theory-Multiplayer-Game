@@ -1,7 +1,13 @@
+import { createCrowdSet } from "./crowd-set.js";
+import { buildBlottoRoom } from "./blotto-practice.js";
+import { BATTLE_ROUNDS } from "../shared/battlefield.js";
+import { createBattlefieldWorld } from "./battlefield-world.js";
+import { Predictor, interpolatePlayers } from "../shared/prediction.js";
 import { dressBear } from "./wardrobe.js";
 import * as THREE from "three";
 import { move, canMove } from "../shared/movement.js";
 import {
+  STAGING_DOME,
   platforms,
   practicePlatforms,
   practiceHazards,
@@ -105,6 +111,49 @@ export function createScene(canvas) {
     sprite.scale.set(width, width / 4, 1);
     return sprite;
   }
+  const battlefieldWorld = createBattlefieldWorld(scene, label);
+  let onTerminal = () => {},
+    battleOverview = false,
+    binoculars = false,
+    onBinocular = () => {};
+  function setBinoculars(value) {
+    binoculars = !!value;
+    onBinocular(binoculars);
+    if (binoculars) {
+      battleOverview = false;
+      canvas.focus();
+      try {
+        const request = canvas.requestPointerLock?.();
+        request?.catch?.(() => {});
+      } catch {}
+    } else if (document.pointerLockElement === canvas)
+      document.exitPointerLock();
+  }
+  canvas.addEventListener("pointermove", (e) => {
+    if (
+      !binoculars ||
+      (document.pointerLockElement !== canvas && !(e.buttons & 1))
+    )
+      return;
+    yaw -= e.movementX * 0.0025;
+    pitch = Math.max(-1.1, Math.min(1.1, pitch - e.movementY * 0.0025));
+  });
+  document.addEventListener("pointerlockchange", () => {
+    if (binoculars && document.pointerLockElement !== canvas) {
+      binoculars = false;
+      onBinocular(false);
+    }
+  });
+  canvas.addEventListener("pointerup", (e) => {
+    if (!snapshot?.battlefield || binoculars) return;
+    const f = battlefieldWorld.pick(
+      camera,
+      canvas,
+      e,
+      snapshot.players.find((p) => p.id === localId),
+    );
+    if (f) onTerminal(f);
+  });
   mesh(new THREE.CylinderGeometry(15.5, 16, 1, 64), "#425771", 0, -0.6);
   mesh(new THREE.CylinderGeometry(14.7, 14.7, 0.08, 64), "#70899d", 0, -0.06);
   ring(14.2, "#96b1bc", 0, 0.025, 0);
@@ -148,6 +197,40 @@ export function createScene(canvas) {
       banner.rotation.y = a;
     }
   }
+  const stagingCage = new THREE.Group();
+  scene.add(stagingCage);
+  const shield = new THREE.Mesh(
+    new THREE.SphereGeometry(
+      STAGING_DOME.radius,
+      64,
+      32,
+      0,
+      Math.PI * 2,
+      0,
+      Math.PI / 2,
+    ),
+    new THREE.ShaderMaterial({
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      vertexShader: `varying vec3 surfaceNormal; varying vec3 viewDirection;
+        void main(){ vec4 positionView=modelViewMatrix*vec4(position,1.0); surfaceNormal=normalize(normalMatrix*normal); viewDirection=-positionView.xyz; gl_Position=projectionMatrix*positionView; }`,
+      fragmentShader: `varying vec3 surfaceNormal; varying vec3 viewDirection;
+        void main(){ float edge=1.0-abs(dot(normalize(surfaceNormal),normalize(viewDirection))); gl_FragColor=vec4(1.0,0.84,0.32,0.09+0.36*pow(edge,2.5)); }`,
+    }),
+  );
+  shield.position.z = STAGING_DOME.z;
+  shield.renderOrder = 2;
+  stagingCage.add(shield);
+  ring(
+    STAGING_DOME.radius,
+    "#ffe078",
+    0,
+    0.025,
+    STAGING_DOME.z,
+    0.055,
+    stagingCage,
+  );
   const environment = environmentTools({ mesh, ring, label });
   let vaultEffects = vaultsFor(1).map((v) =>
     environment.chamber(v, arena, true),
@@ -260,18 +343,25 @@ export function createScene(canvas) {
     0,
     lounge,
   );
-  const lobbyRafters = [-8, -4, 0, 4, 8].map(x =>
-    mesh(new THREE.BoxGeometry(0.22, 0.3, 24), "#a78763", x, 7.15, 0, lounge));
+  const lobbyRafters = [-8, -4, 0, 4, 8].map((x) =>
+    mesh(new THREE.BoxGeometry(0.22, 0.3, 24), "#a78763", x, 7.15, 0, lounge),
+  );
   const parkour = new THREE.Group();
   scene.add(parkour);
   environment.decorateLobby(lounge);
   lounge.scale.set(1.35, 1, 1.35);
-  let parkourScene = null;
+  const blottoWorld = new THREE.Group();
+  blottoWorld.scale.set(1 / 1.35, 1, 1 / 1.35);
+  lounge.add(blottoWorld);
+  buildBlottoRoom(blottoWorld, label);
+  const arenaSet = createCrowdSet(arena, 1);
+  let parkourSet,
+    parkourScene = null;
   function rebuildParkour(stage) {
     parkour.traverse((o) => {
       o.geometry?.dispose();
       if (o.material?.map) {
-        o.material.map.dispose();
+        if (!o.material.map.userData.shared) o.material.map.dispose();
         o.material.dispose();
       } else if (o.material && ![...materials.values()].includes(o.material))
         o.material.dispose();
@@ -279,6 +369,7 @@ export function createScene(canvas) {
     parkour.clear();
     delete parkour.userData.cameraMeshes;
     parkourScene = environment.parkour(stage, parkour);
+    parkourSet = createCrowdSet(parkour, stage);
   }
   arena.visible = false;
   parkour.visible = false;
@@ -322,7 +413,9 @@ export function createScene(canvas) {
             ? "#424251"
             : kind === "panda"
               ? "#f2efdf"
-              : kind === "red" ? "#b85832" : "#ab795b",
+              : kind === "red"
+                ? "#b85832"
+                : "#ab795b",
       dark = ["panda", "red"].includes(kind) ? "#34343f" : body;
     mesh(
       new THREE.SphereGeometry(0.48, 24, 16),
@@ -405,15 +498,15 @@ export function createScene(canvas) {
     mesh(new THREE.SphereGeometry(0.065, 10, 8), "#252938", 0, 1.41, 0.51, rig);
     const accent = COLORS[player.appearance.color] || "#a58be4";
     if (["mint", "pink", "blue", "yellow"].includes(player.appearance.color)) {
-    ring(0.39, accent, 0, 1.03, 0, 0.095, rig);
-    mesh(
-      new THREE.BoxGeometry(0.12, 0.35, 0.09),
-      accent,
-      0.18,
-      0.85,
-      0.42,
-      rig,
-    );
+      ring(0.39, accent, 0, 1.03, 0, 0.095, rig);
+      mesh(
+        new THREE.BoxGeometry(0.12, 0.35, 0.09),
+        accent,
+        0.18,
+        0.85,
+        0.42,
+        rig,
+      );
     }
     dressBear(rig, arms, player.appearance, accent);
     if (player.appearance.hat === "cap") {
@@ -425,14 +518,7 @@ export function createScene(canvas) {
         0,
         rig,
       );
-      mesh(
-        new THREE.BoxGeometry(0.55, 0.045, 0.32),
-        accent,
-        0,
-        1.94,
-        0.3,
-        rig,
-      );
+      mesh(new THREE.BoxGeometry(0.55, 0.045, 0.32), accent, 0, 1.94, 0.3, rig);
     }
     if (player.appearance.hat === "crown") {
       mesh(
@@ -456,15 +542,44 @@ export function createScene(canvas) {
       }
     }
     if (kind === "red") {
-      for (const side of [-1, 1]) mesh(new THREE.SphereGeometry(0.17, 12, 8), "#fff1dc", side * 0.3, 1.4, 0.36, rig);
-      const tail = mesh(new THREE.CylinderGeometry(0.13, 0.2, 0.9, 12), body, 0, 0.6, -0.65, rig);
+      for (const side of [-1, 1])
+        mesh(
+          new THREE.SphereGeometry(0.17, 12, 8),
+          "#fff1dc",
+          side * 0.3,
+          1.4,
+          0.36,
+          rig,
+        );
+      const tail = mesh(
+        new THREE.CylinderGeometry(0.13, 0.2, 0.9, 12),
+        body,
+        0,
+        0.6,
+        -0.65,
+        rig,
+      );
       tail.rotation.x = 0.8;
     }
     if (player.appearance.glasses === "round") {
       for (const side of [-1, 1]) {
-        const lens = mesh(new THREE.TorusGeometry(0.13, 0.025, 8, 20), "#202333", side * 0.17, 1.58, 0.54, rig);
+        const lens = mesh(
+          new THREE.TorusGeometry(0.13, 0.025, 8, 20),
+          "#202333",
+          side * 0.17,
+          1.58,
+          0.54,
+          rig,
+        );
       }
-      mesh(new THREE.BoxGeometry(0.1, 0.025, 0.025), "#202333", 0, 1.58, 0.54, rig);
+      mesh(
+        new THREE.BoxGeometry(0.1, 0.025, 0.025),
+        "#202333",
+        0,
+        1.58,
+        0.54,
+        rig,
+      );
     }
     // Bear materials are private copies: transparency must never affect world materials.
     const avatarMaterials = [];
@@ -510,8 +625,24 @@ export function createScene(canvas) {
     };
   }
   // Decorative entrance cast shares the real lobby and avatar geometry only.
-  const entranceCast = ["panda", "brown", "polar", "black", "red", "panda", "polar", "red"].map((kind, i) => {
-    const model = bear({ name: "", appearance: { bear: kind, color: ["mint", "pink", "blue", "yellow"][i % 4], hat: ["none", "cap", "crown"][i % 3] } });
+  const entranceCast = [
+    "panda",
+    "brown",
+    "polar",
+    "black",
+    "red",
+    "panda",
+    "polar",
+    "red",
+  ].map((kind, i) => {
+    const model = bear({
+      name: "",
+      appearance: {
+        bear: kind,
+        color: ["mint", "pink", "blue", "yellow"][i % 4],
+        hat: ["none", "cap", "crown"][i % 3],
+      },
+    });
     model.name.visible = false;
     return model;
   });
@@ -534,10 +665,24 @@ export function createScene(canvas) {
     snapshot,
     localId,
     local = null;
+  const predictor = new Predictor(),
+    snapshots = [];
+  let predictionSentAt = performance.now(),
+    authoritativeRespawns;
   function update(state, id) {
     received = performance.now();
     snapshot = state;
+    battlefieldWorld.update(state);
+    const sky = state.world.startsWith("battlefield")
+      ? BATTLE_ROUNDS[state.battlefield.round - 1].sky
+      : "#172337";
+    scene.fog.color.set(sky);
+    renderer.setClearColor(sky);
+    renderer.toneMappingExposure = state.battlefield ? 1 : 1.3;
+    snapshots.push({ at: received, state });
+    while (snapshots.length > 12) snapshots.shift();
     if (currentWorld !== state.world) {
+      setBinoculars(false);
       currentWorld = state.world;
       yaw = Math.PI;
       pitch = -0.32;
@@ -558,6 +703,7 @@ export function createScene(canvas) {
       arena.visible = currentWorld === "arena1";
       lounge.visible = currentWorld === "lobby";
       parkour.visible = isParkour(currentWorld);
+      if (currentWorld.startsWith("battlefield")) pitch = -0.18;
       if (parkour.visible) rebuildParkour(stageOf(currentWorld));
       vaultEffects =
         currentWorld === "arena1"
@@ -565,33 +711,34 @@ export function createScene(canvas) {
           : parkourScene?.chambers || [];
     }
     localId = id;
-    scene.fog.near = !id && isParkour(currentWorld) ? 100 : 42;
-    scene.fog.far = !id && isParkour(currentWorld) ? 180 : 85;
+    scene.fog.near = state.battlefield
+      ? 180
+      : !id && isParkour(currentWorld)
+        ? 100
+        : 42;
+    scene.fog.far = state.battlefield
+      ? 850
+      : !id && isParkour(currentWorld)
+        ? 180
+        : 85;
+    camera.far = state.battlefield ? 1000 : 100;
+    camera.updateProjectionMatrix();
     const p = state.players.find((p) => p.id === id);
     if (p) {
       const reset =
-        !local ||
+        !predictor.player ||
         state.round !== previousRound ||
         state.phase !== previousPhase ||
-        local.respawns !== p.respawns ||
-        Math.hypot(local.x - p.x, local.z - p.z) > 2;
-      if (reset) local = { ...p, jumpHeld: false };
-      else {
-        local.x += (p.x - local.x) * 0.3;
-        local.z += (p.z - local.z) * 0.3;
-        local.y += (p.y - local.y) * 0.3;
-        local.vy = p.vy;
-        local.emoteActive = p.emoteActive;
-        local.emoteName = p.emoteName;
-        local.emoteFacing = p.emoteFacing;
-        local.facing = p.facing;
-        if ((p.launchedUntil || 0) > (local.launchedUntil || 0)) {
-          local.vx = p.vx;
-          local.vz = p.vz;
-        }
-        local.launchedUntil = p.launchedUntil || 0;
-        local.hazardCooldown = p.hazardCooldown || 0;
-      }
+        predictor.state?.world !== state.world ||
+        authoritativeRespawns !== p.respawns ||
+        predictor.state?.paused !== state.paused;
+      authoritativeRespawns = p.respawns;
+      local = predictor.reconcile(
+        { ...p, jumpHeld: state.prediction?.jumpHeld ?? false },
+        state,
+        state.prediction?.ack || 0,
+        reset,
+      );
     }
     if (state.phase === "results" && previousPhase !== "results")
       state.results.forEach((r) => {
@@ -637,74 +784,151 @@ export function createScene(canvas) {
     return meshes;
   }
   const angleDelta = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+  const perfEnabled = new URLSearchParams(location.search).has("perf");
+  const perfOutput = perfEnabled ? document.createElement("output") : null;
+  if (perfOutput) {
+    perfOutput.id = "render-performance";
+    perfOutput.hidden = true;
+    document.body.append(perfOutput);
+  }
+  let perfStamp = performance.now(),
+    lastFrame = 0,
+    intervals = [],
+    renderTimes = [];
   function frame(dt, time, input) {
+    const frameStart = performance.now();
+    if (perfOutput && lastFrame) intervals.push(frameStart - lastFrame);
+    lastFrame = frameStart;
+
+    stagingCage.visible =
+      !!snapshot &&
+      snapshot.world !== "lobby" &&
+      ["loading", "countdown"].includes(snapshot.phase);
     const entrance = document.body.dataset.entrance === "true";
-    const reducedMotion = (userReducedMotion || matchMedia("(prefers-reduced-motion: reduce)").matches);
+    const reducedMotion =
+      userReducedMotion ||
+      matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (currentWorld === "arena1")
+      arenaSet.frame(
+        snapshot,
+        (performance.now() - received) / 1000,
+        reducedMotion,
+        low,
+      );
+    else if (isParkour(currentWorld))
+      parkourSet?.frame(
+        snapshot,
+        (performance.now() - received) / 1000,
+        reducedMotion,
+        low,
+      );
+    battlefieldWorld.frame(
+      (performance.now() - received) / 1000,
+      reducedMotion,
+      low,
+      camera.position,
+    );
     lobbyRoof.visible = !entrance && !!localId;
-    lobbyRafters.forEach(beam => beam.visible = lobbyRoof.visible);
+    lobbyRafters.forEach((beam) => (beam.visible = lobbyRoof.visible));
     entranceCast.forEach((model, i) => {
-      const visible = entrance && currentWorld === "lobby" && !snapshot?.players.some(player => player.connected);
+      const visible =
+        entrance &&
+        currentWorld === "lobby" &&
+        !snapshot?.players.some((player) => player.connected);
       model.root.visible = model.shadow.visible = visible;
       if (!visible) return;
       const clock = reducedMotion ? 0 : time;
       const walking = i < 4;
       const t = clock * 0.3 + i * 0.9;
-      const radius = 7 + i % 3 * 2;
+      const radius = 7 + (i % 3) * 2;
       const x = Math.sin(walking ? t : i * 1.3) * radius;
       const z = Math.cos(walking ? t : i * 1.3) * radius;
-      const hop = walking ? Math.max(0, Math.sin(clock * 2.6 + i * 1.7)) * .8 : 0;
+      const hop = walking
+        ? Math.max(0, Math.sin(clock * 2.6 + i * 1.7)) * 0.8
+        : 0;
       model.root.position.set(x, hop, z);
       model.root.rotation.y = walking ? t + Math.PI / 2 : i * 1.3 + Math.PI;
-      model.shadow.position.set(x, .05, z);
+      model.shadow.position.set(x, 0.05, z);
       model.rig.rotation.z = 0;
       model.arms.forEach((arm, j) => {
-        arm.position.set(j ? .48 : -.48, 1, 0);
-        arm.rotation.set(walking ? Math.sin(clock * 7 + j * Math.PI + i) * .9 : 0, 0, 0);
+        arm.position.set(j ? 0.48 : -0.48, 1, 0);
+        arm.rotation.set(
+          walking ? Math.sin(clock * 7 + j * Math.PI + i) * 0.9 : 0,
+          0,
+          0,
+        );
       });
-      model.feet.forEach((foot, j) => foot.rotation.x = walking ? Math.sin(clock * 7 + j * Math.PI + i) * .95 : 0);
+      model.feet.forEach(
+        (foot, j) =>
+          (foot.rotation.x = walking
+            ? Math.sin(clock * 7 + j * Math.PI + i) * 0.95
+            : 0),
+      );
       if (!walking && !reducedMotion) {
         if (i === 4 || i === 7) {
-          model.arms[1].position.set(.6, 1.27, .12);
-          model.arms[1].rotation.z = 2.6 + Math.sin(clock * 10) * .3;
+          model.arms[1].position.set(0.6, 1.27, 0.12);
+          model.arms[1].rotation.z = 2.6 + Math.sin(clock * 10) * 0.3;
         } else if (i === 5) {
-          model.rig.rotation.z = Math.sin(clock * 4) * .18;
-          model.arms.forEach((arm, j) => { arm.rotation.z = (j ? -1 : 1) * (1 + Math.sin(clock * 4) * .4); });
-          model.root.position.y = Math.abs(Math.sin(clock * 4)) * .18;
+          model.rig.rotation.z = Math.sin(clock * 4) * 0.18;
+          model.arms.forEach((arm, j) => {
+            arm.rotation.z = (j ? -1 : 1) * (1 + Math.sin(clock * 4) * 0.4);
+          });
+          model.root.position.y = Math.abs(Math.sin(clock * 4)) * 0.18;
         } else {
-          model.arms[0].position.set(-.32, 1.42, .56);
+          model.arms[0].position.set(-0.32, 1.42, 0.56);
           model.arms[0].rotation.z = -1.5;
-          model.arms[1].position.set(.6, 1.15, .3);
-          model.arms[1].rotation.x = -1.2 + Math.sin(clock * 3) * .5;
+          model.arms[1].position.set(0.6, 1.15, 0.3);
+          model.arms[1].rotation.x = -1.2 + Math.sin(clock * 3) * 0.5;
         }
       }
     });
     if (lounge.userData.board)
       lounge.userData.board.position.y =
         2.3 +
-        ((userReducedMotion || matchMedia("(prefers-reduced-motion: reduce)").matches)
+        (userReducedMotion ||
+        matchMedia("(prefers-reduced-motion: reduce)").matches
           ? 0
           : Math.sin(time * 1.1) * 0.07);
     if (snapshot) {
       const mine = snapshot.players.find((p) => p.id === localId);
-      if (local && mine && canMove(snapshot, mine))
-        move(
-          local,
-          input,
-          dt,
-          snapshot.world,
-          snapshot.worldTime +
-            Math.min((performance.now() - received) / 1000, 0.1),
-        );
+      local = predictor.preview(
+        input,
+        (performance.now() - predictionSentAt) / 1000,
+      );
+      const renderAt = performance.now() - 120;
+      let from = snapshots[0],
+        to = snapshots.at(-1);
+      for (let i = 1; i < snapshots.length; i++)
+        if (snapshots[i].at >= renderAt) {
+          from = snapshots[i - 1];
+          to = snapshots[i];
+          break;
+        }
+      const blend = Math.max(
+        0,
+        Math.min(1, (renderAt - from.at) / Math.max(1, to.at - from.at)),
+      );
       const live = new Set();
       for (const p of snapshot.players) {
-        if (!p.connected || (p.waitingLobby && snapshot.world !== "lobby") || (snapshot.activity && !p.waitingLobby)) continue;
+        if (
+          !p.connected ||
+          (p.waitingLobby && snapshot.world !== "lobby") ||
+          (snapshot.activity && !p.waitingLobby)
+        )
+          continue;
         live.add(p.id);
         let b = bears.get(p.id);
         if (b && b.appearanceKey !== JSON.stringify(p.appearance)) {
-          disposeTree(b.root); scene.remove(b.shadow);
-          b.shadow.geometry.dispose(); b.shadow.material.dispose();
-          b.avatarMaterials.forEach(m => {m.map?.dispose();m.dispose();});
-          bears.delete(p.id); b = null;
+          disposeTree(b.root);
+          scene.remove(b.shadow);
+          b.shadow.geometry.dispose();
+          b.shadow.material.dispose();
+          b.avatarMaterials.forEach((m) => {
+            m.map?.dispose();
+            m.dispose();
+          });
+          bears.delete(p.id);
+          b = null;
         }
         if (!b) {
           b = bear(p);
@@ -730,13 +954,18 @@ export function createScene(canvas) {
         }
         b.lastRespawns = p.respawns || 0;
         const self = p.id === localId;
+        b.root.visible = !(self && binoculars);
+        b.shadow.visible = !(self && binoculars);
         const ghost =
           !!localId &&
           !self &&
-          currentWorld !== "lobby" &&
-          ["loading", "countdown", "active", "practice"].includes(
-            snapshot.phase,
-          );
+          !snapshot.battlefield &&
+          ((currentWorld === "lobby" &&
+            snapshot.players.find((p) => p.id === localId)?.z > 17) ||
+            (currentWorld !== "lobby" &&
+              ["loading", "countdown", "active", "practice"].includes(
+                snapshot.phase,
+              )));
         const opacity = ghost ? 0.22 : 1;
         if (b.opacity !== opacity) {
           b.opacity = opacity;
@@ -755,13 +984,14 @@ export function createScene(canvas) {
           target =
             self && local
               ? local
-              : {
-                  x: p.x + (moving ? (p.vx || 0) * age : 0),
-                  y: p.y,
-                  z: p.z + (moving ? (p.vz || 0) * age : 0),
-                  vx: p.vx,
-                  vz: p.vz,
-                };
+              : from.state.world === to.state.world &&
+                  from.state.round === to.state.round
+                ? interpolatePlayers(
+                    from.state.players.find((q) => q.id === p.id),
+                    to.state.players.find((q) => q.id === p.id) || p,
+                    blend,
+                  )
+                : p;
         b.root.position.lerp(
           new THREE.Vector3(target.x, target.y, target.z),
           1 - Math.exp(-dt * (self ? 24 : 14)),
@@ -789,7 +1019,7 @@ export function createScene(canvas) {
         );
         b.rig.position.z = 0;
         b.rig.rotation.x = 0;
-        b.feet.forEach(foot => foot.position.y = .36);
+        b.feet.forEach((foot) => (foot.position.y = 0.36));
         b.rig.position.y =
           speed > 0.1 && !airborne
             ? Math.abs(Math.sin(b.gait)) * 0.055
@@ -817,8 +1047,22 @@ export function createScene(canvas) {
         });
         const emoteAge =
           p.emoteAge + Math.min((performance.now() - received) / 1000, 0.1);
-        if (currentWorld === "lobby" && p.emoteName && (p.emoteActive || p.emoteFadeAge < .25) && (speed < 0.2 || p.emoteName === "griddy")) {
-          const blend = Math.min(1, emoteAge / 0.3) * (p.emoteActive ? 1 : Math.max(0, 1 - (p.emoteFadeAge + Math.min((performance.now() - received) / 1000, .1)) / .25));
+        if (
+          p.emoteName &&
+          (p.emoteActive || p.emoteFadeAge < 0.25) &&
+          (speed < 0.2 || p.emoteName === "griddy")
+        ) {
+          const blend =
+            Math.min(1, emoteAge / 0.3) *
+            (p.emoteActive
+              ? 1
+              : Math.max(
+                  0,
+                  1 -
+                    (p.emoteFadeAge +
+                      Math.min((performance.now() - received) / 1000, 0.1)) /
+                      0.25,
+                ));
           const ease = blend * blend * (3 - 2 * blend);
           if (p.emoteName === "wave") {
             const a = b.arms[1];
@@ -851,23 +1095,24 @@ export function createScene(canvas) {
           }
           if (p.emoteName === "griddy") {
             const cycle = (emoteAge % 1.4) / 1.4;
-            const eyes = Math.pow(Math.max(0, Math.sin(cycle * Math.PI * 2)), 2) * ease;
+            const eyes =
+              Math.pow(Math.max(0, Math.sin(cycle * Math.PI * 2)), 2) * ease;
             b.arms.forEach((arm, i) => {
               const side = i ? 1 : -1;
-              arm.position.set(side * .48, 1 + .18 * ease, 0);
+              arm.position.set(side * 0.48, 1 + 0.18 * ease, 0);
               arm.rotation.order = "YXZ";
-              arm.rotation.y = -side * .65 * eyes;
-              arm.rotation.x = (.9 * (1 - eyes) - 2.35 * eyes) * ease;
-              arm.rotation.z = side * (-.45 * (1 - eyes) + .7 * eyes) * ease;
-              arm.scale.y = 1 + .7 * eyes;
+              arm.rotation.y = -side * 0.65 * eyes;
+              arm.rotation.x = (0.9 * (1 - eyes) - 2.35 * eyes) * ease;
+              arm.rotation.z = side * (-0.45 * (1 - eyes) + 0.7 * eyes) * ease;
+              arm.scale.y = 1 + 0.7 * eyes;
             });
             b.feet.forEach((foot, i) => {
               const step = Math.sin(emoteAge * 9 + i * Math.PI);
-              foot.rotation.x = step * .8 * ease;
-              foot.position.y = .36 + Math.max(0, step) * .16 * ease;
+              foot.rotation.x = step * 0.8 * ease;
+              foot.position.y = 0.36 + Math.max(0, step) * 0.16 * ease;
             });
-            b.rig.position.y += Math.abs(Math.sin(emoteAge * 6)) * .1 * ease;
-            b.rig.rotation.x = .1 * ease;
+            b.rig.position.y += Math.abs(Math.sin(emoteAge * 6)) * 0.1 * ease;
+            b.rig.rotation.x = 0.1 * ease;
           }
           if (p.emoteName === "dance") {
             b.rig.rotation.z = Math.sin(emoteAge * 10) * 0.17 * ease;
@@ -899,15 +1144,62 @@ export function createScene(canvas) {
           disposeTree(b.root);
           scene.remove(b.shadow);
           b.shadow.geometry.dispose();
-          b.avatarMaterials.forEach((m) => {m.map?.dispose();m.dispose();});
+          b.avatarMaterials.forEach((m) => {
+            m.map?.dispose();
+            m.dispose();
+          });
           b.shadow.material.dispose();
           bears.delete(id);
         }
-      const following = local && mine?.connected ? local : null;
+      const following =
+        local && mine?.connected
+          ? bears.get(localId)?.root.position || local
+          : null;
       if (currentWorld === "lobby" && !localId) {
-        const angle = (userReducedMotion || matchMedia("(prefers-reduced-motion: reduce)").matches) ? 0.6 : performance.now() / 45000;
+        const angle =
+          userReducedMotion ||
+          matchMedia("(prefers-reduced-motion: reduce)").matches
+            ? 0.6
+            : performance.now() / 45000;
         camera.position.set(Math.sin(angle) * 18, 12, Math.cos(angle) * 18);
         camera.lookAt(0, 1, 0);
+      } else if (currentWorld.startsWith("battlefield")) {
+        const target = new THREE.Vector3(
+          following?.x || 0,
+          (following?.y || 0) + 1.6,
+          following?.z || 0,
+        );
+        const targetFov = binoculars ? 24 : 65;
+        if (Math.abs(camera.fov - targetFov) > 0.05) {
+          camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-dt * 14));
+          camera.updateProjectionMatrix();
+        }
+        if (binoculars && localId) {
+          const direction = new THREE.Vector3(
+            Math.sin(yaw) * Math.cos(pitch),
+            Math.sin(pitch),
+            Math.cos(yaw) * Math.cos(pitch),
+          );
+          camera.position.copy(target).addScaledVector(direction, 0.4);
+          camera.lookAt(target.clone().addScaledVector(direction, 100));
+        } else if (battleOverview || !localId) {
+          const distance = Math.max(95, snapshot.battlefield.teams.length * 20);
+          camera.position.lerp(
+            new THREE.Vector3(0, distance, distance * 0.7),
+            1 - Math.exp(-dt * 5),
+          );
+          camera.lookAt(0, 0, 0);
+        } else {
+          const direction = new THREE.Vector3(
+            Math.sin(yaw) * Math.cos(pitch),
+            Math.sin(pitch),
+            Math.cos(yaw) * Math.cos(pitch),
+          );
+          const desired = target.clone().addScaledVector(direction, -8);
+          desired.y = Math.max(target.y + 1.1, desired.y);
+          camera.position.lerp(desired, 1 - Math.exp(-dt * 12));
+          camera.lookAt(target.clone().addScaledVector(direction, 2));
+        }
       } else if (isParkour(currentWorld) && !localId) {
         camera.position.lerp(
           stageOf(currentWorld) >= 3
@@ -962,13 +1254,22 @@ export function createScene(canvas) {
         currentWorld === "lobby"
       ) {
         const at =
-          snapshot.worldTime +
-          (snapshot.paused ||
-          !["active", "practice", "ready", "instructions"].includes(
-            snapshot.phase,
-          )
-            ? 0
-            : Math.min((performance.now() - received) / 1000, 0.1));
+          localId &&
+          predictor.state?.world === currentWorld &&
+          canMove(snapshot, mine)
+            ? predictor.time +
+              Math.min(0.05, (performance.now() - predictionSentAt) / 1000)
+            : snapshot.worldTime +
+              (snapshot.paused ||
+              ![
+                "lobby",
+                "active",
+                "practice",
+                "ready",
+                "instructions",
+              ].includes(snapshot.phase)
+                ? 0
+                : Math.min((performance.now() - received) / 1000, 0.1));
         const stage = stageOf(currentWorld);
         const environmentState =
           currentWorld === "lobby" ? lounge.userData.practice : parkourScene;
@@ -1034,6 +1335,30 @@ export function createScene(canvas) {
       }
     }
     renderer.render(scene, camera);
+    if (perfOutput) {
+      renderTimes.push(performance.now() - frameStart);
+      if (frameStart - perfStamp > 2000) {
+        const sorted = intervals.sort((a, b) => a - b),
+          p = (v, q) =>
+            v[Math.min(v.length - 1, Math.floor(v.length * q))] || 0;
+        perfOutput.textContent = JSON.stringify({
+          world: currentWorld,
+          samples: sorted.length,
+          frameP50: p(sorted, 0.5),
+          frameP95: p(sorted, 0.95),
+          frameMax: sorted.at(-1),
+          meanWork: renderTimes.reduce((a, b) => a + b, 0) / renderTimes.length,
+          calls: renderer.info.render.calls,
+          triangles: renderer.info.render.triangles,
+          geometries: renderer.info.memory.geometries,
+          textures: renderer.info.memory.textures,
+          low,
+        });
+        intervals = [];
+        renderTimes = [];
+        perfStamp = frameStart;
+      }
+    }
   }
   function resize() {
     renderer.setSize(innerWidth, innerHeight);
@@ -1043,47 +1368,144 @@ export function createScene(canvas) {
   resize();
   addEventListener("resize", resize);
   return {
+    onTerminal(fn) {
+      onTerminal = fn;
+    },
+    nearbyTerminal() {
+      return battlefieldWorld.nearest(
+        snapshot?.players.find((p) => p.id === localId),
+      );
+    },
+    setBattleCamera(value) {
+      battleOverview = value;
+      if (value) setBinoculars(false);
+    },
+    setBinoculars,
+    onBinocularChange(fn) {
+      onBinocular = fn;
+    },
+    predict(seq, input, dt) {
+      predictor.input(seq, input, dt);
+      predictionSentAt = performance.now();
+    },
+    clearPrediction() {
+      predictor.clear();
+      snapshots.length = 0;
+      local = null;
+      snapshot = null;
+      authoritativeRespawns = undefined;
+    },
     locker(canvas, appearance) {
       const preview = new THREE.Scene();
       const light = new THREE.HemisphereLight(0xffffff, 0x666080, 2.5);
       preview.add(light);
       const key = new THREE.DirectionalLight(0xffffff, 3);
-      key.position.set(3, 5, 5); preview.add(key);
+      key.position.set(3, 5, 5);
+      preview.add(key);
       const cam = new THREE.PerspectiveCamera(35, 1, 0.1, 20);
-      cam.position.set(0, 1.3, 4.0); cam.lookAt(0, 1.1, 0);
-      const output = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+      cam.position.set(0, 1.3, 4.0);
+      cam.lookAt(0, 1.1, 0);
+      const output = new THREE.WebGLRenderer({
+        canvas,
+        alpha: true,
+        antialias: true,
+      });
       output.setPixelRatio(Math.min(devicePixelRatio, 1.5));
-      let model, angle = 0, frameId;
+      let model,
+        angle = 0,
+        frameId;
       const clear = () => {
         if (!model) return;
         preview.remove(model.root);
-        model.root.traverse(o => { if (o.isMesh) { o.geometry.dispose(); if (model.avatarMaterials.includes(o.material)) { o.material.map?.dispose(); o.material.dispose(); } } });
+        model.root.traverse((o) => {
+          if (o.isMesh) {
+            o.geometry.dispose();
+            if (model.avatarMaterials.includes(o.material)) {
+              o.material.map?.dispose();
+              o.material.dispose();
+            }
+          }
+        });
       };
-      const change = a => {
-        clear(); model = bear({ appearance: a, name: "" });
-        scene.remove(model.shadow); model.shadow.geometry.dispose(); model.shadow.material.dispose();
-        model.root.remove(model.name); model.name.material.map?.dispose(); model.name.material.dispose(); model.name.geometry.dispose();
+      const change = (a) => {
+        clear();
+        model = bear({ appearance: a, name: "" });
+        scene.remove(model.shadow);
+        model.shadow.geometry.dispose();
+        model.shadow.material.dispose();
+        model.root.remove(model.name);
+        model.name.material.map?.dispose();
+        model.name.material.dispose();
+        model.name.geometry.dispose();
         preview.add(model.root);
       };
       change(appearance);
-      let previousX, hovering = false, spinAngle = 0, previousTime = performance.now();
+      let previousX,
+        hovering = false,
+        spinAngle = 0,
+        previousTime = performance.now();
       const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-      canvas.onpointerenter = () => { hovering = true; angle = 0; };
-      canvas.onpointerleave = () => { hovering = false; if (previousX === undefined) angle = spinAngle; };
-      canvas.onkeydown = e => { if (["ArrowLeft", "ArrowRight"].includes(e.key)) { e.preventDefault(); hovering = true; angle += e.key === "ArrowLeft" ? -0.2 : 0.2; } };
-      canvas.onpointerdown = e => { hovering = true; previousX = e.clientX; canvas.setPointerCapture(e.pointerId); };
-      canvas.onpointermove = e => { if (previousX !== undefined) { angle += (e.clientX - previousX) * 0.015; previousX = e.clientX; } };
-      canvas.onpointerup = canvas.onpointercancel = () => { previousX = undefined; hovering = canvas.matches(":hover"); if (!hovering) angle = spinAngle; };
+      canvas.onpointerenter = () => {
+        hovering = true;
+        angle = 0;
+      };
+      canvas.onpointerleave = () => {
+        hovering = false;
+        if (previousX === undefined) angle = spinAngle;
+      };
+      canvas.onkeydown = (e) => {
+        if (["ArrowLeft", "ArrowRight"].includes(e.key)) {
+          e.preventDefault();
+          hovering = true;
+          angle += e.key === "ArrowLeft" ? -0.2 : 0.2;
+        }
+      };
+      canvas.onpointerdown = (e) => {
+        hovering = true;
+        previousX = e.clientX;
+        canvas.setPointerCapture(e.pointerId);
+      };
+      canvas.onpointermove = (e) => {
+        if (previousX !== undefined) {
+          angle += (e.clientX - previousX) * 0.015;
+          previousX = e.clientX;
+        }
+      };
+      canvas.onpointerup = canvas.onpointercancel = () => {
+        previousX = undefined;
+        hovering = canvas.matches(":hover");
+        if (!hovering) angle = spinAngle;
+      };
       const draw = () => {
         const now = performance.now();
-        if (!hovering && previousX === undefined && !reduced.matches && !userReducedMotion) { spinAngle += Math.min((now - previousTime) / 1000, 0.1) * 0.65; angle = spinAngle; }
+        if (
+          !hovering &&
+          previousX === undefined &&
+          !reduced.matches &&
+          !userReducedMotion
+        ) {
+          spinAngle += Math.min((now - previousTime) / 1000, 0.1) * 0.65;
+          angle = spinAngle;
+        }
         previousTime = now;
-        const width = canvas.clientWidth, height = canvas.clientHeight;
-        output.setSize(width, height, false); cam.aspect = width / height; cam.updateProjectionMatrix();
-        model.root.rotation.y = angle; output.render(preview, cam); frameId = requestAnimationFrame(draw);
+        const width = canvas.clientWidth,
+          height = canvas.clientHeight;
+        output.setSize(width, height, false);
+        cam.aspect = width / height;
+        cam.updateProjectionMatrix();
+        model.root.rotation.y = angle;
+        output.render(preview, cam);
+        frameId = requestAnimationFrame(draw);
       };
       draw();
-      return { change, dispose() { cancelAnimationFrame(frameId); clear(); output.dispose(); } };
+      return {
+        change,
+        dispose() {
+          cancelAnimationFrame(frameId);
+          clear();
+          output.dispose();
+        },
+      };
     },
     async ready() {
       await environmentAssetsReady();
@@ -1123,8 +1545,12 @@ export function createScene(canvas) {
         z: Math.cos(yaw) * forward + Math.sin(yaw) * side,
       };
     },
-    listenerYaw() { return yaw; },
-    setMotion(value) { userReducedMotion = value; },
+    listenerYaw() {
+      return yaw;
+    },
+    setMotion(value) {
+      userReducedMotion = value;
+    },
     setQuality(value) {
       low = value;
       renderer.setPixelRatio(low ? 1 : Math.min(devicePixelRatio, 1.5));

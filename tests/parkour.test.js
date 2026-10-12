@@ -71,17 +71,17 @@ test("falls respawn, elevated landing, and moving platform carries its rider", (
   assert.equal(p.support, stone.id);
 });
 test("jump can reach the next elevated stone using only valid inputs", () => {
-  const p = { x: 0, z: -2, y: 0, vy: 0, grounded: true, support: "spawn" };
+  const p = { x: 0, z: -4.4, y: 0, vy: 0, grounded: true, support: "spawn" };
   for (let i = 0; i < 15; i++)
     move(
       p,
-      { x: 0, z: i < 6 ? -1 : 0, jump: i === 0 },
+      { x: 0, z: i < 10 ? -1 : 0, jump: i === 0 },
       0.05,
       "arena2",
       i * 0.05,
     );
   assert.ok(p.z < -2.5);
-  assert.ok(p.y >= 0.6);
+  assert.ok(p.support?.startsWith("gold-"));
   assert.equal(p.respawns, undefined);
 });
 
@@ -161,6 +161,13 @@ for (const stage of [2, 3, 4, 5])
   test(`round ${stage}: all three routes are reachable with actual collision and hazard rules`, () => {
     for (const route of ["bronze", "gold", "diamond"]) {
       const p = { x: 0, z: 1, y: 0, vy: 0, grounded: true, support: "spawn" };
+      const first = platforms(0, stage).find(s=>s.route===route);
+      const factor = 5.6 / Math.max(Math.abs(first.x),Math.abs(first.z-1));
+      // Walk to the launch edge on the enlarged spawn before jumping the gap.
+      for(let n=0;n<300 && Math.hypot(p.x-first.x*factor,p.z-(1+(first.z-1)*factor))>.12;n++) {
+        const dx=first.x*factor-p.x,dz=1+(first.z-1)*factor-p.z,d=Math.hypot(dx,dz);
+        move(p,{x:dx/d*Math.min(1,d),z:dz/d*Math.min(1,d)},.02,`arena${stage}`,0);
+      }
       let time = 0;
       const stones = platforms(0, stage)
         .filter((s) => s.route === route)
@@ -213,7 +220,7 @@ for (const stage of [2, 3, 4, 5])
               (stage === 2 &&
                 Number(p.support?.split("-")[1]) >
                   Number(targetId.split("-")[1]))) &&
-            (dist < 0.45 || stage === 2)
+            (dist < 0.45 || (stage === 2 && targetId !== route))
           ) {
             reached = true;
             break;
@@ -238,7 +245,8 @@ for (const stage of [2, 3, 4, 5])
   });
 
 test("round 2 assists adjacent rising ledges without Space; round 3 requires a jump", () => {
-  const p = { x: 0, z: -1.7, y: 0, vy: 0, grounded: true, support: "spawn" };
+  const stone = platforms(0,2).find(s=>s.id==="gold-1");
+  const p = { x: stone.x, z: stone.z, y: stone.y, vy: 0, grounded: true, support: stone.id };
   let highest = 0;
   for (let i = 1; i <= 120; i++) {
     move(p, { z: -1 }, 0.02, "arena2", i * 0.02);

@@ -1,3 +1,4 @@
+import { BLOTTO_WALLS } from "./blotto.js";
 // The renderer and authoritative simulation consume these same dimensions.
 export const STAGES = [
   {
@@ -72,8 +73,8 @@ export function vaultsFor(stage = 2) {
   const vaults = endpoints[stage].map(([x, z, y], i) => ({
     id: IDS[i],
     name: IDS[i][0].toUpperCase() + IDS[i].slice(1),
-    x,
-    z,
+    x: stage > 1 ? x * (1 + 6 / Math.hypot(x,z-1)) : x,
+    z: stage > 1 ? 1 + (z-1) * (1 + 6 / Math.hypot(x,z-1)) : z,
     y,
     color: COLORS[i],
     angle: Math.atan2(-x, 1 - z),
@@ -89,6 +90,17 @@ export function vaultsFor(stage = 2) {
       angle: 0,
     });
   return vaults;
+}
+// Shared dome dimensions keep the rendered shield and staging collision aligned.
+export const STAGING_DOME = { radius: 6, z: 1 };
+export function arenaBounds(stage) {
+  const vaults = vaultsFor(stage).filter(v => v.id !== "sky");
+  const margin = 10; // Rotated 7×7 vault floors plus clear space before perimeter ribs.
+  return {
+    side: Math.max(34, ...vaults.map(v => Math.abs(v.x) + margin)),
+    front: Math.max(stage >= 3 ? 28 : 8, ...vaults.map(v => v.z + margin)),
+    rear: Math.min(stage === 5 ? -55 : stage === 4 ? -47 : -39, ...vaults.map(v => v.z - margin)),
+  };
 }
 // Flip transitions do not supply a walkable surface; the flat face and vertical
 // edge use their actual box dimensions. Shrinking platforms retain a fixed center.
@@ -148,7 +160,7 @@ export function jumpPads(world, time = 0) {
   const stage = stageOf(world);
   if (stage < 3) return [];
   const points = [
-    [0, 4.5, 0],
+    [0, 8.8, 0],
     [-3, 7, 2.8],
     [1, 10, 5.6],
     [4, 7, 8.4],
@@ -162,8 +174,8 @@ export function jumpPads(world, time = 0) {
         x,
         z,
         y,
-        w: stage === 5 ? 1.9 : 2.5,
-        d: stage === 5 ? 1.9 : 2.5,
+        w: stage === 5 ? 2.3 : 2.5,
+        d: stage === 5 ? 2.3 : 2.5,
         h: 0.7,
         color: "#ba9cff",
         impulse: 13,
@@ -249,8 +261,10 @@ export function practiceHazards(time = 0) {
 export function lobbyRegion(x, z) {
   return (
     Math.hypot(x, z) <= 19 ||
-    (Math.abs(x) <= 3.2 && z >= 17 && z <= 30) ||
-    (Math.abs(x) <= 12 && z >= 29 && z <= 62)
+    (Math.abs(x) <= 5.2 && z >= 17 && z <= 30) ||
+    (Math.abs(x) <= 12 && z >= 29 && z <= 62) ||
+    (x >= 2 && x <= 26 && z >= 23 && z <= 30) ||
+    (x >= 14 && x <= 30 && z >= 29 && z <= 53)
   );
 }
 export const ROUTES = vaultsFor(2);
@@ -308,24 +322,26 @@ function stairHeight(v, count, i, stage) {
 export function platforms(time = 0, stage = 2) {
   const key = stage + ":" + time.toFixed(6);
   if (platformCache.has(key)) return platformCache.get(key);
-  const blocks = [{ id: "spawn", x: 0, z: 1, y: 0, w: 9, d: 9, h: 0.7 }];
-  const width = { 2: 2.8, 3: 2.55, 4: 2.35, 5: 2.15 }[stage];
+  const blocks = [{ id: "spawn", x: 0, z: 1, y: 0, w: 12, d: 12, h: 0.7 }];
+  const width = { 2: 2.8, 3: 2.55, 4: 2.35, 5: 2.5 }[stage];
   for (const [index, v] of vaultsFor(stage)
     .filter((v) => v.id !== "sky")
     .entries()) {
     const distance = Math.hypot(v.x, v.z - 1),
       ux = v.x / distance,
       uz = (v.z - 1) / distance;
-    const count = Math.ceil((distance - 5.3) / 3.3);
+    const start = (6 + width / 2 + 0.8) / Math.max(Math.abs(ux), Math.abs(uz));
+    const end = distance - 5.3;
+    const count = Math.ceil((distance - 6 - 5.3) / 3.3);
     for (let i = 1; i <= count; i++) {
       const t = i / count,
         length =
-          (distance - 5.3) * t +
+          start + (end - start) * (i - 1) / (count - 1) +
           (stage === 2 && i >= Math.ceil(count * 0.65)
             ? (1.1 * (count - i)) / Math.max(1, count - Math.ceil(count * 0.65))
             : 0);
       const stagger =
-        stage >= 3 && index > 0
+        stage >= 3 && index > 0 && i > 1
           ? Math.sin((i * Math.PI) / 2) * (0.7 + (stage - 3) * 0.12)
           : 0;
       const moving =
@@ -532,6 +548,9 @@ export function solids(world, time = 0) {
     h: 2.1,
   });
   return cacheSet(solidCache, key, [
+    {id:"blotto-hall-floor",x:13,z:26.5,y:-.3,w:26,d:7,h:.5},
+    ...BLOTTO_WALLS.map((b,i)=>({...b,id:"blotto-wall-"+i})),
+    {id:"blotto-room-floor",x:22,z:41,y:-.3,w:16,d:24,h:.5},
     ...practicePlatforms(time).map((p) => ({ ...p, y: p.y - p.h / 2 })),
     {
       id: "practice-punch-wall",

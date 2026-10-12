@@ -9,7 +9,7 @@ async function client() {
   w.messages = [];
   w.on("message", (raw) => {
     const m = JSON.parse(raw);
-    w.messages.push(m);
+    if (m.type !== "state") w.messages.push(m);
     if (m.type === "state") {
       w.state = m.state;
       (w.frameTimes ||= []).push(performance.now());
@@ -50,7 +50,7 @@ send(host, { type: "host", action: "lobby" });
 const players = await Promise.all(
   Array.from({ length: 40 }, async (_, i) => {
     const w = await client();
-    send(w, { type: "join", name: "Load " + i, appearance: { bear: "panda" } });
+    send(w, { type: "join", name: "Load" + i, appearance: { bear: "panda" } });
     return w;
   }),
 );

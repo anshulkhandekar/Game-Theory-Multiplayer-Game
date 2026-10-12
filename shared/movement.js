@@ -1,4 +1,6 @@
+import { battlefieldSolids, homePosition, HOME_RADIUS, barriersRaised, battlefieldBounds } from "./battlefield.js";
 import {
+  STAGING_DOME,
   platforms,
   jumpPads,
   practicePlatforms,
@@ -16,7 +18,7 @@ import {
 export const MOVEMENT = {
   speed: 6.8,
   acceleration: 25,
-  braking: 32,
+  braking: 70,
   gravity: 20,
   jump: 7.8,
   radius: 14,
@@ -24,9 +26,11 @@ export const MOVEMENT = {
   bodyHeight: 2.05,
 };
 export function canMove(state, player) {
+  if (state.battlefield && (state.world.startsWith("battlefield") || state.battlefield.phase === "matching")) return !state.battlefield.paused && !player.waitingLobby;
   return (
     !state.paused &&
-    ["lobby", "ready", "instructions", "active", "practice"].includes(
+    (!["loading", "countdown"].includes(state.phase) || (player.loaded && player.eligible)) &&
+    ["lobby", "ready", "instructions", "loading", "countdown", "active", "practice"].includes(
       state.phase,
     ) &&
     (player.eligible || !["active", "practice"].includes(state.phase))
@@ -68,14 +72,38 @@ function horizontal(p, boxes) {
     Object.assign(p, toWorld(q, b));
   }
 }
-export function move(p, input, dt, world = "arena1", time = 0) {
+export function move(p, input, dt, world = "arena1", time = 0, staging = false, battlefield = null) {
+  if (world.startsWith("battlefield")) {
+    const ix=input.x||0, iz=input.z||0, length=Math.max(1,Math.hypot(ix,iz));
+    p.vx=approach(p.vx||0,ix/length*MOVEMENT.speed,MOVEMENT.acceleration*dt);
+    p.vz=approach(p.vz||0,iz/length*MOVEMENT.speed,MOVEMENT.acceleration*dt);
+    const bounds=battlefield?battlefieldBounds(battlefield.teams):{x:420,z:340};
+    p.x=Math.max(-bounds.x,Math.min(bounds.x,p.x+p.vx*dt)); p.z=Math.max(-bounds.z,Math.min(bounds.z,p.z+p.vz*dt));
+    if(battlefield) {
+      horizontal(p,battlefieldSolids(battlefield.teams));
+      const home = homePosition(battlefield, p.id);
+      if (home && barriersRaised(battlefield.phase)) {
+        const dx = p.x-home.x, dz = p.z-home.z, distance = Math.hypot(dx,dz);
+        if(distance > HOME_RADIUS-.35) {
+          const limit=HOME_RADIUS-.35, nx=dx/distance, nz=dz/distance;
+          p.x=home.x+nx*limit; p.z=home.z+nz*limit;
+          const outward=Math.max(0,p.vx*nx+p.vz*nz);
+          p.vx-=outward*nx; p.vz-=outward*nz;
+        }
+      }
+    }
+    if (ix||iz) p.facing=Math.atan2(ix,iz);
+    if (input.jump && !p.jumpHeld && p.grounded) { p.vy=MOVEMENT.jump; p.grounded=false; }
+    p.jumpHeld=!!input.jump; p.vy=(p.vy||0)-MOVEMENT.gravity*dt; p.y=Math.max(0,(p.y||0)+p.vy*dt);
+    if (p.y===0) {p.vy=0;p.grounded=true;} return;
+  }
   const parkour = isParkour(world),
     stage = stageOf(world);
   let ix = input.x || 0,
     iz = input.z || 0,
     length = Math.hypot(ix, iz);
   if (length > 0.01) p.facing = Math.atan2(ix, iz);
-  if (world === "lobby" && p.emoteActive && p.emoteName === "griddy" && length === 0 && !input.jump) {
+  if (p.emoteActive && p.emoteName === "griddy" && length === 0 && !input.jump) {
     ix = Math.sin(p.emoteFacing ?? Math.PI) * .2;
     iz = Math.cos(p.emoteFacing ?? Math.PI) * .2;
     length = .2;
@@ -260,4 +288,16 @@ export function move(p, input, dt, world = "arena1", time = 0) {
       }
     }
   }
+  if (staging) {
+    const head = Math.min(STAGING_DOME.radius, Math.max(0, p.y + MOVEMENT.bodyHeight));
+    const limit = Math.max(0, Math.sqrt(STAGING_DOME.radius ** 2 - head ** 2) - MOVEMENT.bodyRadius);
+    const dz = p.z - STAGING_DOME.z, distance = Math.hypot(p.x, dz);
+    if (distance > limit) {
+      const nx = p.x / distance, nz = dz / distance;
+      p.x = nx * limit; p.z = STAGING_DOME.z + nz * limit;
+      const outward = p.vx * nx + p.vz * nz;
+      if (outward > 0) { p.vx -= outward * nx; p.vz -= outward * nz; }
+    }
+  }
+
 }

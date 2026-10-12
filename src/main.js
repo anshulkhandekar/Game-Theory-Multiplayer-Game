@@ -1,3 +1,7 @@
+import { createBlottoPractice } from "./blotto-practice.js";
+import { teamPlan } from "../shared/battlefield.js";
+import { createBattlefieldUI } from "./battlefield-ui.js";
+import { canEmote } from "../shared/emotes.js";
 import { WARDROBE, normalizeAppearance, randomAppearance } from "../shared/wardrobe.js";
 import { createScene } from "./scene.js";
 import { appropriateText } from "../server/moderation.js";
@@ -21,7 +25,7 @@ app.innerHTML = `<canvas id="scene" tabindex="0" aria-label="Game view"></canvas
 <aside id="social" hidden><div class="social-heading"><span id="social-title">Lobby chat</span><button id="social-toggle" aria-expanded="true">Hide</button></div><div id="social-body"><div id="messages" tabindex="0" aria-label="Recent messages"></div><form id="chat-form"><input id="chat-text" aria-label="Lobby message" maxlength="160" placeholder="Say hello…" autocomplete="off"><button>Send</button></form></div></aside><div id="emote-menu" role="dialog" aria-label="Emote wheel" hidden><span>Choose an emote</span><button data-emote="wave"><kbd>1</kbd> Wave</button><button data-emote="scuba"><kbd>2</kbd> Scuba</button><button data-emote="dance"><kbd>3</kbd> Dance</button><button data-emote="griddy"><kbd>4</kbd> Griddy</button><small>E or Escape to close</small></div><div id="personal" aria-live="polite"></div><div id="vaults" aria-label="Vault rewards and occupancy"></div>
 <aside id="board"><h3>Standings</h3><p class="board-note">Crowd Rush earnings</p><div id="leaderboard"></div></aside>
 <footer><span class="key-guide"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move <span id="look-guide"><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> Look</span> <kbd class="space-key">Space</kbd> Jump</span><div class="footer-actions"><button id="emotes">Emotes · E</button><button id="ready">I'm ready</button></div></footer>
-<details id="settings" class="settings-menu"><summary><span aria-hidden="true">☰</span> Menu</summary><div class="settings-panel"><label>Color theme<select id="palette"><option value="purple">Purple</option><option value="peach">Peach</option></select></label><button type="button" id="sound">Mute audio</button><button type="button" id="quality">Low graphics</button><button type="button" id="motion">Reduce motion</button><button type="button" id="help">Rules</button><details><summary>Controls</summary><p>WASD moves · Arrows look · Space jumps<br>E opens emotes · 1–4 selects one<br>Move or jump to stop an emote.</p></details></div></details><div id="transition" aria-live="polite"></div><div id="overlay"></div><div id="host"></div><div id="toast" role="status"></div>`;
+<details id="settings" class="settings-menu"><summary><span aria-hidden="true">☰</span> Menu</summary><div class="settings-panel"><label>Color theme<select id="palette"><option value="purple">Purple</option><option value="peach">Peach</option></select></label><button type="button" id="sound">Mute audio</button><button type="button" id="remote-sound">Mute other players’ emotes</button><button type="button" id="quality">Low graphics</button><button type="button" id="motion">Reduce motion</button><button type="button" id="workshop-info">Workshop info · 3 games</button><button type="button" id="help">Rules</button><details><summary>Controls</summary><p>WASD moves · Arrows look · Space jumps<br>E opens emotes · 1–4 selects one<br>Move or jump to stop an emote.</p></details></div></details><div id="transition" aria-live="polite"></div><div id="overlay"></div><div id="host"></div><div id="toast" role="status"></div>`;
 document.body.dataset.view = view;
 const gameScene = createScene(document.querySelector("#scene"));
 const audio = createAudio();
@@ -56,7 +60,14 @@ const escape = (s) =>
         c
       ],
   );
+const blottoPractice=createBlottoPractice(audio);
+const battlefieldUI=createBattlefieldUI({send,escape,view,scene:gameScene,toast});
+gameScene.onTerminal(front=>battlefieldUI.openTerminal(front));
+const controlling=()=>joined || (view === "host" && authed && !!state?.battlefield?.demo);
 function instructions() {
+  if (state?.battlefield) {
+    toast("Your goal is to win territory across three fronts. Buy units at your barracks with E and compare armies with binoculars (1). The stronger army wins each front. Final changes are private, and purchases freeze at the countdown.");return;
+  }
   keys.clear();
   overlay.innerHTML = `<div class="modal rules"><div class="sheet-heading"><span>Crowd Rush rules</span><h2>How to play</h2></div><div class="sheet-body"><p>Step inside a vault chamber before the clock runs out. Its floor lights up and the HUD confirms “Inside”. Leave its threshold to change your choice. Everyone inside shares its reward equally.</p><div class="rule-example"><b>240</b><span>Gold reward</span><i>÷</i><b>4</b><span>Bears inside</span><i>=</i><b>60</b><span>Each bear earns</span></div><p>Move with WASD and jump with Space. In the lobby and rounds 2–5, use arrow keys to look around. Round 2 assists small adjacent steps. Rounds 3–5 have paths in three directions and a purple jump-pad route to the elevated Sky vault. Step on a jump pad to launch, then steer with WASD. Round 4 adds wall punchers; round 5 combines punchers and floor spikes with faster moving platforms. Amber warns before hazards strike; red is dangerous. Falls return you to the start. Move freely between vaults. More bears means a smaller share. Outside all chambers earns zero.</p><p>Practice doesn’t change your earnings. Scored rounds add to the standings.</p><button id="close">Back to the arena</button></div></div>`;
   document.querySelector("#close").onclick = () => (overlay.innerHTML = "");
@@ -96,8 +107,8 @@ function social() {
     ? "Lobby chat"
     : "Round events";
   document.querySelector("#chat-form").hidden = !lobby || view !== "player";
-  document.querySelector("#emotes").hidden = !lobby || view !== "player";
-  if (!lobby) document.querySelector("#emote-menu").hidden = true;
+  document.querySelector("#emotes").hidden = view !== "player" || !canEmote(state, state.players.find(p => p.id === id));
+  if (!canEmote(state, state.players.find(p => p.id === id))) document.querySelector("#emote-menu").hidden = true;
   const messages = state.messages || [],
     key = state.world + ":" + messages.map((m) => m.seq).join(",");
   if (key !== lastSocialKey) {
@@ -189,9 +200,17 @@ function joinForm() {
     send({ type: "join", id: token, pageId, resume: false, ...profile });
   };
 }
+let inputSequence = 0, lastInputSent = performance.now();
 function send(m) {
   if (m.type === "input" && (m.x || m.z || m.jump)) audio.emote(null);
-  if (ws?.readyState === 1) ws.send(JSON.stringify(m));
+  if (ws?.readyState === 1) {
+    if (m.type === "input") {
+      if (ws.bufferedAmount > 8192) return;
+      const now = performance.now(); m.seq = ++inputSequence;
+      gameScene.predict(m.seq, m, Math.min(.1, (now-lastInputSent)/1000)); lastInputSent = now;
+    }
+    ws.send(JSON.stringify(m));
+  }
 }
 function connect() {
   ws = new WebSocket(
@@ -225,13 +244,15 @@ function connect() {
     if (m.type === "state") {
       const old = state;
       state = m.state;
+      const demoPilot=view==='host'&&authed&&state.battlefield?.demo ? state.battlefield.demo.pilot : null;
+      if(view==='host' && id!==demoPilot){id=demoPilot;gameScene.clearPrediction();keys.clear();}
       if (state.world === "lobby" && old?.world !== "lobby")
         lobbyEnteredAt = performance.now();
       receivedAt = performance.now();
       gameScene.update(state, id);
       const player = state.players.find(p => p.id === id);
       const previousPlayer = old?.players.find(p => p.id === id);
-      if (joined && player?.connected && player.emoteActive && state.world === "lobby" && !state.paused) audio.emote(player.emoteName, `${player.id}:${player.emoteName}:${player.emoteAt}`);
+      if (joined && player?.connected && player.emoteActive && canEmote(state, player) && !state.paused) audio.emote(player.emoteName, `${player.id}:${player.emoteName}:${player.emoteAt}`, player.emoteAge);
       else audio.emote(null);
       if (joined && previousPlayer && player) {
         if ((player.hazardCooldown || 0) > (previousPlayer.hazardCooldown || 0)) audio.impact("punch", .12);
@@ -244,8 +265,9 @@ function connect() {
       if (joined && previousPlayer?.grounded && player && !player.grounded && player.vy > 0 && player.padCooldown === previousPlayer.padCooldown) audio.cue("jump");
       phaseFeedback(old);
       renderUI();
+      if (state.battlefield && old?.world !== state.world) audio.cue("softClick");
       const roomNotice = document.querySelector("#entrance-room");
-      if (roomNotice) roomNotice.textContent = state.world === "lobby" ? `${state.players.filter(p => p.connected).length} players in the lobby` : `Crowd Rush · Round ${state.stage} · ${["active", "practice", "countdown"].includes(state.phase) ? `${state.phase === "countdown" ? "Starting" : "In progress"} · ${Math.ceil(state.remaining)}s left${state.paused ? " · Paused" : ""}` : "Waiting for the host"}`;
+      if (roomNotice) roomNotice.textContent = state.battlefield ? `Battlefield · ${state.battlefield.phase === "matching" ? "Team matching" : "Activity in progress"}` : state.world === "lobby" ? `${state.players.filter(p => p.connected).length} players in the lobby` : `Crowd Rush · Round ${state.stage} · ${["active", "practice", "countdown"].includes(state.phase) ? `${state.phase === "countdown" ? "Starting" : "In progress"} · ${Math.ceil(state.remaining)}s left${state.paused ? " · Paused" : ""}` : "Waiting for the host"}`;
       if (authed && old?.stage !== state.stage) {
         document.querySelector("#stage").value = state.stage;
         document.querySelector("#duration").value = state.duration;
@@ -263,13 +285,16 @@ function connect() {
       hostUI();
       if (!m.ok) toast("Incorrect host key");
     }
+    if (m.type === "battleAck") battlefieldUI.ack(m.receipt);
     if (m.type === "error") {
+      battlefieldUI.error();
       if (view === "player" && !joined) joinForm();
       toast(m.message);
     }
   };
   ws.onclose = (e) => {
     audio.emote(null);
+    gameScene.clearPrediction();
     joined = false;
     authed = false;
     keys.clear();
@@ -295,9 +320,13 @@ function toast(t) {
 function hostUI() {
   if (view !== "host") return;
   document.querySelector("#host").innerHTML = authed
-    ? `<div class="hostpanel"><h3>Control desk</h3><div class="actions">${["instructions", "practice", "ready", "start", "countdown", "forceCountdown", "pause", "resume", "results", "next", "lobby"].map((a) => `<button data-action="${a}">${{ instructions: "Show rules", practice: "Load practice", ready: "Gather ready checks", start: "Load scored round", countdown: "Start countdown", forceCountdown: "Start without waiting", pause: "Pause", resume: "Resume", results: "Reveal results", next: "Next round", lobby: "Return to lobby" }[a]}</button>`).join("")}</div><label>Arena<select id="stage">${STAGES.map((s) => `<option value="${s.id}">Round ${s.id}: ${s.name}</option>`).join("")}</select></label><label>Scored duration (seconds)<input id="duration" type="number" min="5" max="180" value="${state?.duration || 35}"></label><label>Rewards: bronze, gold, diamond, sky (rounds 3–5)<input id="rewards" value="${[...["bronze", "gold", "diamond", "sky"].map((key) => state?.rewardPools?.[key] ?? { bronze: 120, gold: 240, diamond: 360, sky: 480 }[key])].join(",")}"></label><button id="configure">Apply settings</button><p class="host-help">Start without waiting admits ready scenes; others wait in the lobby.</p><div id="roster"></div></div>`
+    ? `<div class="hostpanel"><h3>Control desk</h3><div class="actions">${["instructions", "practice", "ready", "start", "countdown", "forceCountdown", "pause", "resume", "leaderboard", "results", "next", "lobby", "battlefield"].map((a) => `<button data-action="${a}">${{ instructions: "Show rules", practice: "Load practice", ready: "Gather ready checks", start: "Load scored round", countdown: "Start countdown", forceCountdown: "Start without waiting", pause: "Pause", resume: "Resume", leaderboard: "Show leaderboard", results: "End round & show results", next: "Next round", lobby: "Return to lobby", battlefield: "Start Battlefield matching" }[a]}</button>`).join("")}</div><label>Arena<select id="stage">${STAGES.map((s) => `<option value="${s.id}">Round ${s.id}: ${s.name}</option>`).join("")}</select></label><label>Scored duration (seconds)<input id="duration" type="number" min="5" max="180" value="${state?.duration || 35}"></label><label>Rewards: bronze, gold, diamond, sky (rounds 3–5)<input id="rewards" value="${[...["bronze", "gold", "diamond", "sky"].map((key) => state?.rewardPools?.[key] ?? { bronze: 120, gold: 240, diamond: 360, sky: 480 }[key])].join(",")}"></label><button id="configure">Apply settings</button><p class="host-help">Start without waiting admits ready scenes; others wait in the lobby.</p><div id="roster"></div></div>`
     : `<form class="hostpanel" id="auth"><h3>Host sign in</h3><label>Server host key<input type="password" id="key" required></label><button>Authenticate</button></form>`;
   if (authed) {
+    document.querySelector('#host .hostpanel').insertAdjacentHTML('beforeend', `<details class="demo-setup"><summary>Battlefield solo demo</summary><p>Simulated pandas, opponents and disposable scores. Participants include your controllable demo bear.</p><label>Participants<input id="demo-count" type="number" min="2" max="40" value="16"></label><label>Preferred team size<select id="demo-size"><option value="3">Automatic · prefer 3</option><option value="2">Prefer 2</option></select></label><p id="demo-plan"></p><button id="start-demo">Start solo demo</button></details>`);
+    const previewDemo=()=>{try{const plan=teamPlan(Number(document.querySelector('#demo-count').value),Number(document.querySelector('#demo-size').value));document.querySelector('#demo-plan').textContent=`${plan.length} teams · ${plan.map(n=>n+' players').join(', ')}. Exact sizes may adjust for fair reciprocal fronts.`;}catch(e){document.querySelector('#demo-plan').textContent=e.message;}};
+    document.querySelector('#demo-count').oninput=previewDemo;document.querySelector('#demo-size').onchange=previewDemo;previewDemo();
+    document.querySelector('#start-demo').onclick=()=>send({type:'host',action:'battlefieldDemo',data:{count:Number(document.querySelector('#demo-count').value),preferred:Number(document.querySelector('#demo-size').value)}});
     document.querySelector("#stage").value = state?.stage || 1;
     document.querySelector("#stage").onchange = (e) =>
       (document.querySelector("#duration").value =
@@ -328,7 +357,7 @@ function hostUI() {
     };
 }
 function loadingUI() {
-  if (view === "host") {
+  if (view !== "player") {
     document.querySelector("#transition").innerHTML = "";
     return;
   }
@@ -353,9 +382,17 @@ function loadingUI() {
     keys.clear();
     const parkour = state.stage > 1 && !intro;
     panel.innerHTML = `<section class="loading-card" aria-labelledby="loading-title"><span>${intro ? "Lobby" : `Round ${state.stage} · ${state.practice ? "Practice" : "Scored"}`}</span><h2 id="loading-title">${intro ? "Before you join" : STAGES[state.stage - 1].name}</h2><ol class="loading-steps"><li tabindex="0"><b>1</b><div><h3>${intro ? "Move and look" : "Choose a reward"}</h3><p>${intro ? "WASD moves. Arrows look. Space jumps." : "Every vault has a pool. More bears inside means a smaller share."}</p></div></li><li tabindex="0"><b>2</b><div><h3>${intro ? "Try the practice hall" : parkour ? "Time your route" : "Step into a chamber"}</h3><p>${intro ? "Follow the tunnel to practice jumps and hazards. E opens emotes; 1–4 selects one." : parkour ? STAGES[state.stage - 1].description + (state.stage >= 3 ? " Purple pads launch you toward Sky." : " Round 2 assists small adjacent steps.") : "The lit floor and HUD confirm you are inside. Leave the doorway to change your choice."}</p></div></li><li tabindex="0"><b>3</b><div><h3>${intro ? "Wait for the host" : "Stay inside at the deadline"}</h3><p>${intro ? "Use lobby chat to greet others. The host loads each activity, then starts its countdown." : "The server divides each occupied pool equally. Outside all vaults earns zero."}</p></div></li></ol><div class="loading-progress" role="status">Preparing the scene…</div>${view === "player" ? '<div class="loading-actions"><button id="load-continue" disabled>Continue</button></div>' : "<p>The host starts the countdown after players continue.</p>"}</section>`;
+    panel.dataset.step = "0";
+    panel.querySelectorAll(".loading-steps li").forEach((li,i) => li.hidden = i !== 0);
     for (const button of panel.querySelectorAll("button"))
       button.onclick = () => {
         if (preparedKey !== key) return;
+        if (!intro && Number(panel.dataset.step) < 2) {
+          panel.dataset.step = String(Number(panel.dataset.step) + 1);
+          panel.querySelectorAll(".loading-steps li").forEach((li,i) => li.hidden = i !== Number(panel.dataset.step));
+          button.textContent = Number(panel.dataset.step) === 2 ? "Enter staging area" : "Next";
+          return;
+        }
         send({ type: "loadReady", round: state.round });
         dismissedKey = key;
         panel.innerHTML = "";
@@ -376,8 +413,11 @@ function loadingUI() {
         if (loadingKey !== key) return;
         preparedKey = key;
         send({ type: "sceneLoaded", round });
+        if (intro) {
+          send({type:"loadReady",round}); dismissedKey=key; panel.innerHTML=""; return;
+        }
         panel.querySelector(".loading-progress").textContent =
-          "Continue when you’re ready.";
+          "Explore the vaults, then enter the staging area. The gate opens after the countdown.";
         panel.querySelectorAll("button").forEach((b) => (b.disabled = false));
       })
       .catch(() => {
@@ -389,10 +429,26 @@ function loadingUI() {
   }
 }
 function renderUI() {
+  blottoPractice.update(state,id);
+  if (state.battlefield && view === "player" && !joined) { battlefieldUI.update(state,id,authed,joined); return; }
+  if (state.battlefield) {
+    document.body.dataset.world=state.world;document.body.dataset.phase=state.phase;
+    document.querySelector("#social").hidden=true;
+    document.querySelector("#ready").style.display="none";
+    document.querySelector("#emotes").disabled=true;
+    document.querySelector("#transition").innerHTML="";
+    overlay.innerHTML=""; tour.hidden=true; readyGuide.hidden=true;
+    battlefieldUI.update(state,id,authed,joined);return;
+  }
+  battlefieldUI.update(state,id,authed,joined);
+  document.querySelector("#board .board-note").textContent=state.world==="lobby"?"Total Points":"Crowd Rush earnings";
+  document.querySelector("#board").style.display="";
   social();
   document.body.dataset.world = state.world;
   document.body.dataset.phase = state.phase;
   loadingUI();
+  lobbyTutorial();
+  standingsUI();
   document.querySelector("#look-guide").hidden = state.world === "arena1";
   document.querySelector("#vaults").hidden = state.world === "lobby";
   document
@@ -436,11 +492,11 @@ function renderUI() {
     .join("");
   document.querySelector("#leaderboard").innerHTML = [...state.players]
     .filter(p => !p.kicked)
-    .sort((a, b) => b.earnings - a.earnings)
+    .sort((a, b) => state.world === "lobby" ? (b.earnings+(b.battlefieldScore||0))-(a.earnings+(a.battlefieldScore||0)) : b.earnings-a.earnings)
     .slice(0, 40)
     .map(
       (p, i) =>
-        `<div class="score ${p.id === id ? "me" : ""}"><span class="rank">${i + 1}</span><span class="player-name">${escape(p.name)}${p.id === id ? " <em>you</em>" : ""}${p.connected ? "" : " <em>away</em>"}</span><b>${p.earnings.toFixed(1)}</b></div>`,
+        `<div class="score ${p.id === id ? "me" : ""}"><span class="rank">${i + 1}</span><span class="player-name">${escape(p.name)}${p.id === id ? " <em>you</em>" : ""}${p.connected ? "" : " <em>away</em>"}</span><b>${(p.earnings+(state.world==="lobby"?(p.battlefieldScore||0):0)).toFixed(1)}</b></div>`,
     )
     .join("");
   document.querySelector("#ready").style.display =
@@ -457,12 +513,15 @@ function renderUI() {
   }
   const me = state.players.find((p) => p.id === id);
   document.querySelector("#ready").textContent = me?.ready
-    ? "✓ Ready"
+    ? "Confirmed ready"
     : "Confirm ready";
   document.querySelector("#ready").classList.toggle("ready-confirmed", !!me?.ready);
   document.querySelector("#ready").setAttribute("aria-pressed", String(!!me?.ready));
-  if (state.phase === "ready") document.querySelector("#headline").textContent = me?.ready ? "Ready confirmed" : "Confirm you’re ready";
-  if (state.phase === "results" && (joined || view === "projector")) {
+  if (state.phase === "ready") document.querySelector("#headline").textContent = me?.ready ? "Confirmed ready" : "Confirm you’re ready";
+  document.querySelector("#headline").classList.toggle("confirmed-ready",state.phase === "ready" && !!me?.ready);
+  readyGuide.hidden = view !== "player" || !joined || state.phase !== "ready" || !!me?.ready;
+  if(!readyGuide.hidden) pointArrow(readyGuide, document.querySelector("#ready"), null);
+  if (state.phase === "results" && joined && view === "player") {
     if (overlay.dataset.round !== String(state.round)) {
       overlay.dataset.round = state.round;
       overlay.innerHTML = `<div class="modal results"><div class="sheet-heading"><span>${state.practice ? "Practice / No earnings added" : "Round " + state.stage + " of 5 / Scored attempt " + state.scoredRound}</span><h2>Round results</h2></div><div class="sheet-body"><div class="result-column-head"><span>Bear / Vault split</span><span>Earned</span></div><div class="resultrows">${[
@@ -485,6 +544,11 @@ function renderUI() {
   }
 }
 document.querySelector("#help").onclick = instructions;
+document.querySelector("#workshop-info").onclick=()=>{
+  keys.clear();document.querySelector("#settings").open=false;
+  overlay.innerHTML=`<section class="modal workshop-info" role="dialog" aria-label="Workshop information"><div class="sheet-heading"><span>Aggie Data Science Club</span><h2>Three games. One workshop.</h2></div><div class="sheet-body"><p>You’ll play three games: Crowd Rush, Battlefield and Poker Showdown. The players with the highest total score after all three games win.</p><ol><li><b>Game 1 · Crowd Rush</b><p>Choose where to compete for rewards. Try the parkour hall straight ahead for movement practice.</p></li><li><b>Game 2 · Battlefield</b><p>Coordinate your resources across three fronts. Follow the gold floor arrows through the left doorway for Colonel Blotto practice against your own bot.</p></li><li><b>Game 3 · Poker Showdown</b><p>The bunker practice will be added with game three.</p></li></ol><p>Lobby practice is optional and doesn’t change your workshop points. You can always check Total Points in the lobby standings.</p><button id="close-workshop-info">Back to the lobby</button></div></section>`;
+  document.querySelector("#close-workshop-info").onclick=()=>overlay.innerHTML="";
+};
 document.querySelector("#ready").onclick = () => { audio.cue("ready"); send({ type: "ready", ready: true }); };
 function input() {
   if (document.querySelector("#load-continue"))
@@ -501,6 +565,15 @@ addEventListener("keydown", (e) => {
   const typing =
     ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName) ||
     document.activeElement.isContentEditable;
+  if(!typing && state?.world==="lobby" && !state.battlefield) {
+    if(e.code==="KeyE"&&!e.repeat&&blottoPractice.open()){e.preventDefault();return;}
+    if(e.code==="Escape")blottoPractice.close();
+  }
+  if(!typing && state?.battlefield && controlling()) {
+    if((e.code==='Digit1'||e.code==='Numpad1')&&!e.repeat){e.preventDefault();battlefieldUI.toggleBinoculars();return;}
+    if(e.code==='KeyE'&&!e.repeat){e.preventDefault();const terminal=gameScene.nearbyTerminal();if(terminal)battlefieldUI.openTerminal(terminal);else toast('Walk to one of the three glowing screens under your barracks tent');return;}
+    if(e.code==='Escape'){battlefieldUI.putAwayBinoculars();battlefieldUI.closeTerminal();return;}
+  }
   if (!typing && !document.querySelector("#emote-menu").hidden) {
     if (/^(Digit|Numpad)[1-4]$/.test(e.code)) {
       e.preventDefault();
@@ -524,7 +597,7 @@ addEventListener("keydown", (e) => {
         document.activeElement.tagName,
       ) || document.activeElement.isContentEditable
     ) &&
-    state?.world === "lobby" &&
+    canEmote(state || {}, state?.players.find(p => p.id === id)) &&
     joined &&
     !overlay.innerHTML
   ) {
@@ -548,13 +621,13 @@ addEventListener("keydown", (e) => {
   ) {
     e.preventDefault();
     keys.add(e.code);
-    if (e.code === "Space" && !e.repeat && joined)
+    if (e.code === "Space" && !e.repeat && controlling())
       send({ type: "input", ...input() });
   }
 });
 addEventListener("keyup", (e) => {
   keys.delete(e.code);
-  if (e.code === "Space" && joined) send({ type: "input", ...input() });
+  if (e.code === "Space" && controlling()) send({ type: "input", ...input() });
 });
 addEventListener("blur", () => {
   keys.clear();
@@ -589,8 +662,11 @@ document.querySelector("#sound").onclick = async () => {
     ? "Mute audio"
     : "Unmute audio";
 };
+function remoteSoundText() { document.querySelector("#remote-sound").textContent = audio.remoteEnabled ? "Mute other players’ emotes" : "Unmute other players’ emotes"; }
+remoteSoundText();
+document.querySelector("#remote-sound").onclick = () => {audio.toggleRemote(); remoteSoundText();};
 setInterval(() => {
-  if (joined && view === "player") send({ type: "input", ...input() });
+  if (controlling() && (view === "player" || state?.battlefield?.demo)) send({ type: "input", ...input() });
 }, 50);
 function updateHostActions() {
   const phase = state.phase;
@@ -610,8 +686,10 @@ function updateHostActions() {
       ["loading", "active", "practice", "countdown"].includes(phase) &&
       !state.paused,
     resume: state.paused,
+    leaderboard: true,
     results: ["active", "practice", "countdown"].includes(phase),
     lobby: phase !== "lobby",
+    battlefield: ["lobby", "results"].includes(phase),
     next: phase === "results" && !state.practice && state.stage < 5,
   };
   document
@@ -666,7 +744,7 @@ function frame(t) {
     const activity = state.activity;
     if (activity) {
       const seconds = Math.ceil(Math.max(0, activity.remaining - (activity.paused ? 0 : (performance.now() - receivedAt) / 1000)));
-      document.querySelector("#headline").textContent = ["active", "practice", "countdown"].includes(activity.phase)
+      document.querySelector("#headline").textContent = activity.kind === "battlefield" ? "Watching Battlefield · You’ll join the next team matching" : ["active", "practice", "countdown"].includes(activity.phase)
         ? `Round ${activity.stage} ${activity.paused ? "paused" : "in progress"} · ${seconds}s left · You’ll join the next round`
         : "Waiting in the lobby · You’ll join the next round";
     }
@@ -722,9 +800,12 @@ function frame(t) {
     !["INPUT", "SELECT"].includes(document.activeElement.tagName)
   )
     gameScene.look(dt, keys);
+  blottoPractice.frame();
+  battlefieldUI.clock((performance.now()-receivedAt)/1000);
   audio.remoteEmotes(joined && !document.querySelector("#load-continue") ? state : null, state?.players.find(p => p.id === id), id, gameScene.listenerYaw());
+  audio.battlefield((controlling()||(view==="host"&&authed))?{...state,audioReceivedAt:receivedAt}:null,state?.players.find(p=>p.id===id)||{x:0,z:0},gameScene.listenerYaw());
   audio.environment(joined && !document.querySelector("#load-continue") ? state : null, state?.players.find(p => p.id === id), gameScene.listenerYaw());
-  gameScene.frame(dt, t / 1000, joined ? input() : { x: 0, z: 0, jump: false });
+  gameScene.frame(dt, t / 1000, controlling() ? input() : { x: 0, z: 0, jump: false });
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -734,3 +815,74 @@ if (view !== "player") {
 }
 hostUI();
 connect();
+
+const guideArrowMarkup = '<svg class="guide-arrow" aria-hidden="true" viewBox="0 0 56 32"><path d="M5 16H47M35 5L47 16L35 27" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const readyGuide=document.createElement("div"); readyGuide.id="ready-guide"; readyGuide.hidden=true; readyGuide.innerHTML=guideArrowMarkup; document.body.append(readyGuide);
+function pointArrow(element,target,card) {
+  const t=target.getBoundingClientRect();
+  let x=t.x+t.width/2, y=t.y-35, angle=90;
+  if(card) {
+    const c=card.getBoundingClientRect();
+    const startX=card.classList.contains("tour-menu")?c.right:c.x+c.width/2;
+    const startY=c.bottom-8;
+    const menu=card.classList.contains("tour-menu");
+    const endX=menu?t.x-10:t.x+t.width/2, endY=menu?t.y+t.height/2:t.y-10;
+    const dx=endX-startX,dy=endY-startY,d=Math.hypot(dx,dy)||1;
+    x=endX-dx/d*32; y=endY-dy/d*32; angle=Math.atan2(dy,dx)*180/Math.PI;
+  } else element=element.querySelector(".guide-arrow");
+  element.style.left=`${x}px`; element.style.top=`${y}px`; element.style.setProperty("--arrow-angle",`${angle}deg`);
+}
+// The tour observes gameplay inputs and confirmed server emotes; it never blocks movement.
+const tour = document.createElement("aside");
+tour.id = "lobby-tutorial"; tour.setAttribute("aria-live","polite"); document.body.append(tour);
+let tourStep = 0, tourGroups = new Set(), menuOpened = false, tourEmoteAt;
+let tourDone = localStorage.getItem("bear-lobby-tutorial-v1") === "done";
+function finishTourStep() {
+  tourStep++;
+  if(tourStep === 3) { tourDone=true; localStorage.setItem("bear-lobby-tutorial-v1","done"); toast("Tutorial completed");
+    const notice=document.querySelector("#toast"); notice.classList.remove("tutorial-completed"); void notice.offsetWidth; notice.classList.add("tutorial-completed"); }
+  lobbyTutorial();
+}
+function lobbyTutorial() {
+  document.querySelectorAll(".tutorial-target").forEach(el=>el.classList.remove("tutorial-target"));
+  const p=state?.players.find(p=>p.id===id);
+  const active=view==="player" && joined && state?.world==="lobby" && p?.loaded && !tourDone && !overlay.innerHTML && !document.querySelector("#blotto-practice:not([hidden])") && !document.querySelector("#load-continue");
+  tour.hidden=!active; if(!active)return;
+  const target=document.querySelector([".key-guide","#settings > summary","#emotes"][tourStep]);
+  target.classList.add("tutorial-target");
+  if(tourStep===1 && document.querySelector("#settings").open) menuOpened=true;
+  tour.className=["tour-left","tour-menu","tour-emote"][tourStep];
+  if(tour.dataset.step !== String(tourStep)) {
+  tour.dataset.step=String(tourStep);
+  tour.innerHTML=`<span>Tutorial · ${tourStep+1} / 3</span><h3>${["Move, look & jump","Make yourself comfortable","Say hello with an emote"][tourStep]}</h3><p>${["Three games make up the workshop, and the highest total score wins. First, try two controls: WASD to move, arrows to look, or Space to jump.","Open Menu for workshop info and settings, then close it. Game 1 practice is straight ahead; Game 2 practice is through the left doorway.","Open Emotes (E) and play any emote."][tourStep]}</p>${guideArrowMarkup}`;
+  }
+  pointArrow(tour.querySelector(".guide-arrow"),target,tour);
+  if(tourStep===2) {
+    if(tourEmoteAt===undefined)tourEmoteAt=p.emoteAt ?? null;
+    if(p.emoteActive && p.emoteAt!==tourEmoteAt)finishTourStep();
+  }
+}
+addEventListener("keydown",e=>{
+  if(tour.hidden || tourStep!==0 || e.repeat || ["INPUT","TEXTAREA","SELECT"].includes(document.activeElement.tagName))return;
+  if(["KeyW","KeyA","KeyS","KeyD"].includes(e.code))tourGroups.add("move");
+  if(e.code.startsWith("Arrow"))tourGroups.add("look");
+  if(e.code==="Space")tourGroups.add("jump");
+  if(tourGroups.size>=2)finishTourStep();
+});
+document.querySelector("#settings").addEventListener("toggle",()=>{
+  if(tour.hidden || tourStep!==1)return;
+  if(document.querySelector("#settings").open)menuOpened=true;
+  else if(menuOpened)finishTourStep();
+});
+const standings=document.createElement("div"); standings.id="standings-dialog"; document.body.append(standings);
+let standingsSerial, standingsTimeout;
+function standingsUI() {
+  if(standingsSerial===undefined){standingsSerial=state.leaderboardSerial;return;}
+  if(standingsSerial===state.leaderboardSerial)return;
+  standingsSerial=state.leaderboardSerial;
+  if(view!=="player" || !joined)return;
+  clearTimeout(standingsTimeout);
+  standings.innerHTML=`<section class="modal results" role="dialog" aria-label="Workshop leaderboard"><div class="sheet-heading"><span>Workshop standings · closes in 5 seconds</span><h2>Leaderboard</h2></div><div class="sheet-body"><div class="resultrows">${state.players.filter(p=>!p.kicked).sort((a,b)=>(b.earnings+(b.battlefieldScore||0))-(a.earnings+(a.battlefieldScore||0))).map((p,i)=>`<div class="${p.id===id?"own-result":""}"><b>${i+1}. ${escape(p.name)}</b><strong>${(p.earnings+(p.battlefieldScore||0)).toFixed(2)}</strong></div>`).join("")}</div><button id="close-standings">Close</button></div></section>`;
+  document.querySelector("#close-standings").onclick=()=>{standings.innerHTML="";clearTimeout(standingsTimeout);};
+  standingsTimeout=setTimeout(()=>standings.innerHTML="",5000);
+}
