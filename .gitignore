@@ -14,3 +14,8 @@ coverage/
 .DS_Store
 /*.jpg
 /*.jpeg
+
+# Private development notes and agent tooling
+local-notes/
+.agents/
+skills-lock.json
