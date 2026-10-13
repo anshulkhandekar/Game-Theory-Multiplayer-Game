@@ -30,24 +30,6 @@ export function buildBlottoRoom(parent, label) {
     root.add(lamp);
     mesh(-22, 5.25, z, 2, 0.15, 1, "#eee2bb");
   }
-  // Direction belongs to the floor, so the route stays correct from any camera angle.
-  for (const x of [-5, -9, -13, -17, -21]) {
-    mesh(x, 0.035, 26.5, 2.1, 0.05, 0.5, "#d6b972");
-    const arrow = new THREE.Mesh(
-      new THREE.ShapeGeometry(
-        new THREE.Shape()
-          .moveTo(-0.8, 0)
-          .lineTo(0.65, 0.65)
-          .lineTo(0.65, -0.65)
-          .closePath(),
-      ),
-      new THREE.MeshBasicMaterial({ color: "#e8cb86" }),
-    );
-    arrow.rotation.x = -Math.PI / 2;
-    arrow.scale.x = -1;
-    arrow.position.set(-x + 1, 0.065, 26.5);
-    root.add(arrow);
-  }
   mesh(-22, 5, 29, 8.2, 0.65, 0.4, "#79579c");
   mesh(-22, 0.7, 43, 7, 1.4, 3, "#756455");
   mesh(-22, 1.45, 43, 7.2, 0.15, 3.2, "#d5c29b");

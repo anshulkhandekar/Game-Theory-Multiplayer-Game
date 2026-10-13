@@ -236,7 +236,7 @@ export function createBattlefieldAudio({ context, enabled, noise, cue }) {
     if (b.phase === "reveal") {
       if (fight !== state.round) {
         fight = state.round;
-        cue("go");
+        cue("warHorn");
       }
       const sources = positions.map((p) => ({
         p,

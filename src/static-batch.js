@@ -26,8 +26,15 @@ export function batchStatic(group, excluded = new Set()) {
     child.updateMatrix();
     if (!paints.has(key))
       paints.set(key, { material: m, parts: [], originals: [] });
-    const paint = paints.get(key),
-      geometry = child.geometry.clone().applyMatrix4(child.matrix);
+    const paint = paints.get(key);
+    let geometry = child.geometry.clone().applyMatrix4(child.matrix);
+    // Rounded furniture is unindexed; normalize copies so it can share a batch
+    // with indexed spheres/cylinders without merge errors or lost detail.
+    if (geometry.index) {
+      const flat = geometry.toNonIndexed();
+      geometry.dispose();
+      geometry = flat;
+    }
     paint.parts.push(geometry);
     paint.originals.push(child);
   }

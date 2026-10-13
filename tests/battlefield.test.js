@@ -528,3 +528,10 @@ test("home barriers hold through countdown, drop during combat/results, and retu
   assert.equal(b.phase, "staging");
   assert.ok(Math.hypot(p.x - home.x, p.z - home.z) < 10);
 });
+
+test('Disconnected wallets auto-deploy only in the final five seconds, preserving connected choices',()=>{
+ const r=room(6);const b=begin(r);r.game.command('battle:final');const team=b.teams[0],absent=team.members[0],connected=team.members[1];
+ const budget=b.wallets[absent],kept=b.wallets[connected];r.game.players.get(absent).connected=false;b.locks[absent]=true;
+ r.advance(9999);assert.equal(b.wallets[absent],budget);r.advance(1);assert.equal(b.wallets[absent],0);assert.equal(b.wallets[connected],kept);
+ const fronts=b.fronts.filter(f=>[f.a,f.b].includes(team.id));const amounts=fronts.map(f=>b.personalOrders[absent][f.id].troop);assert.equal(amounts.reduce((a,b)=>a+b,0),budget);assert.ok(Math.max(...amounts)-Math.min(...amounts)<=1);const orders=JSON.stringify(b.orders);r.advance(5000);assert.equal(JSON.stringify(b.orders),orders);
+});

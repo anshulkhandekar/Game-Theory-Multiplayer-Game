@@ -9,6 +9,7 @@ import {
   hazards,
   chamberSolids,
   STAGES,
+  PRACTICE_HALL_WALLS,
 } from "../shared/world.js";
 
 const assetPromises = [];
@@ -374,14 +375,6 @@ export function environmentTools({ mesh, ring, label }) {
           2,
           lounge,
         );
-      mesh(
-        new THREE.CylinderGeometry(0.14, 0.12, 0.25, 12),
-        "#e6e9dd",
-        x < 0 ? -7.5 : 7.5,
-        0.82,
-        2.3,
-        lounge,
-      );
     }
     const board = new THREE.Group();
     board.position.set(-6, 2.3, 12.5);
@@ -413,9 +406,8 @@ export function environmentTools({ mesh, ring, label }) {
       23,
       practice,
     );
-    mesh(new THREE.BoxGeometry(0.3, 6, 12), "#446773", -5.4, 3, 23, practice);
-    mesh(new THREE.BoxGeometry(0.3, 6, 6), "#446773", 5.4, 3, 20, practice);
-    mesh(new THREE.BoxGeometry(0.3, 1, 6), "#698781", 5.4, 5.5, 26, practice);
+    for (const wall of PRACTICE_HALL_WALLS)
+      mesh(new THREE.BoxGeometry(wall.w,wall.h,wall.d),wall.h===1?'#698781':'#446773',wall.x,wall.y,wall.z,practice);
     mesh(new THREE.BoxGeometry(10.8, 0.25, 12), "#698781", 0, 6, 23, practice);
     mesh(
       new THREE.BoxGeometry(24, 0.5, 33),
@@ -715,7 +707,8 @@ export function environmentTools({ mesh, ring, label }) {
         5: ["Is the highest vault worth it?", "Amber warns before a strike"],
       }[stage];
       const hint = lettering(hints, 13, 6, "#e2e8d9", palette);
-      hint.position.set(x - Math.sign(x) * 0.7, 7, -8);
+      // Both existing wall ribs and the new stage rig protrude 0.85 units inward.
+      hint.position.set(x - Math.sign(x) * 1.3, 7, -8);
       hint.rotation.y = (-Math.sign(x) * Math.PI) / 2;
       parent.add(hint);
     }

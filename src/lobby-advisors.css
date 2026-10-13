@@ -1,0 +1,20 @@
+.advisor-hint { position: fixed; bottom: 82px; left: 50%; transform: translateX(-50%); z-index: 20; background: #f5ead5; color: #302a40; border: 2px solid #b39ccc; border-radius: 22px; padding: 10px 18px; box-shadow: 0 4px 15px #15152355; }
+.advisor-dialog { position: fixed; right: 24px; bottom: 148px; width: min(390px, calc(100vw - 32px)); z-index: 35; background: #faf4e8; color: #302a40; border: 3px solid var(--advisor-accent); border-radius: 18px; box-shadow: 0 12px 40px #13152b55; padding: 20px; box-sizing: border-box; }
+.advisor-dialog[hidden], .advisor-hint[hidden] { display:none; }
+.advisor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; border-bottom: 1px solid #dacfc0; padding-bottom: 12px; }
+.advisor-heading h2 { margin: 3px 0; font-size: 30px; }
+.advisor-heading p { margin: 0; font-size: 13px; }
+.advisor-dialog small { color: #64596b; }
+.advisor-heading button { font-size: 24px; padding: 2px 10px; }
+.advisor-dialog button { background: #e9ddce; color: #302a40; border: 1px solid #cbbdad; border-radius: 9px; }
+.advisor-tip { padding: 16px 0; min-height: 165px; }
+.advisor-tip h3 { font-size: 21px; margin: 8px 0; line-height: 1.25; }
+.advisor-tip p { font-size: 15px; line-height: 1.6; margin: 8px 0 0; }
+.advisor-dialog nav { display: flex; justify-content: space-between; gap: 10px; }
+.advisor-dialog nav button { padding: 9px 14px; }
+.advisor-dialog nav button:last-child { background: var(--advisor-accent); }
+.advisor-dialog button:disabled { opacity: .4; }
+.advisor-exit { display: block; margin-top: 12px; }
+@media(max-height:620px) { .advisor-dialog { bottom: 110px; max-height: calc(100vh - 130px); overflow:auto; } }
+
+body:has(.advisor-dialog:not([hidden])) #board { visibility: hidden; }

@@ -1,15 +1,16 @@
+import { createCasinoAudio } from "./casino-audio.js";
 import { createBattlefieldAudio } from "./battlefield-audio.js";
 import { EMOTE_SECONDS } from "../shared/emotes.js";
 import { platforms, practicePlatforms, hazards, practiceHazards, stageOf, isParkour } from "../shared/world.js";
 import { audibleStructures, soundDistance } from "../shared/sound.js";
 // Audio unlocks on the first user gesture; saved mute preference wins over defaults.
-export function createAudio() {
+export function createAudio({projector=false} = {}) {
   let context, enabled = localStorage.getItem('bear-muted') !== 'true';
   let remoteEnabled = localStorage.getItem("bear-remote-muted") !== "true";
   let activeKey = '', generation = 0, timer, voices = new Set(), desired;
   const buffers = new Map(), remoteChannels = new Map();
   const motors = new Map(), hazardStates = new Map();
-  let noiseBuffer, environmentWorld = "", lastEnvironment = 0, lastHazardAt = -1000;
+  let noiseBuffer, environmentWorld = "", lastEnvironment = 0, lastHazardAt = -1000, lastLobbyTankAt = null;
   function noise() {
     if (!noiseBuffer) {
       noiseBuffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
@@ -40,6 +41,11 @@ export function createAudio() {
     }
     const now=performance.now();if(now-lastEnvironment<80)return;lastEnvironment=now;
     if(environmentWorld!==state.world){silenceEnvironment();environmentWorld=state.world;}
+    // Keep the toy tank’s sound independent of the retired advice UI.
+    if (state.world === "lobby" && player.lobbyTankAt != null) {
+      if (lastLobbyTankAt != null && player.lobbyTankAt !== lastLobbyTankAt) cue("lobbyTank");
+      lastLobbyTankAt = player.lobbyTankAt;
+    } else lastLobbyTankAt = null;
     const time=state.worldTime, stage=stageOf(state.world);
     const ps=state.world==="lobby"?practicePlatforms(time):isParkour(state.world)?platforms(time,stage):[];
     const beforePlatforms=state.world==="lobby"?practicePlatforms(time-.04):isParkour(state.world)?platforms(time-.04,stage):[];
@@ -66,6 +72,7 @@ export function createAudio() {
       }
     }
   }
+  const casinoAudio=createCasinoAudio({context:()=>context,enabled:()=>enabled,noise});
   const battleAudio=createBattlefieldAudio({context:()=>context,enabled:()=>enabled,noise,cue});
   function battlefield(state,player,yaw=0){battleAudio.update(state,player,yaw);}
   function stopRemote(id) {
@@ -124,6 +131,10 @@ export function createAudio() {
     if (enabled && context.state !== "running") await context.resume();
   }
   function cue(kind) {
+    if(projector && ["jump","pad"].includes(kind)) return;
+    if(kind === "warHorn") {casinoAudio.horn();return;}
+    if(kind === "card") {casinoAudio.card();return;}
+    if(kind === "lobbyTank") { impact("punch", .04); return; }
     if (!enabled || context?.state !== 'running') return;
     const settings = {
       hover: [[180], .003, .09], softClick: [[160], .008, .045], click: [[105], .035, .06],
@@ -180,11 +191,11 @@ export function createAudio() {
     }catch {buffers.delete(name);if(run===generation)activeKey='';}
   }
   return {
-    cue, unlock, emote, stop, environment, impact, remoteEmotes, battlefield,
+    cue, unlock, emote, stop, environment, impact, remoteEmotes, battlefield, casino:casinoAudio.update,
     get enabled(){return enabled;},
     get remoteEnabled(){return remoteEnabled;},
     toggleRemote(){remoteEnabled=!remoteEnabled;localStorage.setItem("bear-remote-muted",String(!remoteEnabled));if(!remoteEnabled)for(const id of remoteChannels.keys())stopRemote(id);return remoteEnabled;},
     async toggle(){ enabled=!enabled;localStorage.setItem('bear-muted',String(!enabled));
-      if(!enabled){battleAudio.stop();stop();silenceEnvironment();for (const id of remoteChannels.keys()) stopRemote(id);}else {await unlock();if(desired)emote(desired.name,desired.key,desired.age);}return enabled; },
+      if(!enabled){casinoAudio.stop();battleAudio.stop();stop();silenceEnvironment();for (const id of remoteChannels.keys()) stopRemote(id);}else {await unlock();if(desired)emote(desired.name,desired.key,desired.age);}return enabled; },
   };
 }

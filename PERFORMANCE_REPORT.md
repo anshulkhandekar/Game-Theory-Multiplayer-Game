@@ -1,3 +1,13 @@
+# October 12 — workshop refinement validation
+
+125 automated tests and the production build passed. A fresh disposable 40-client Poker rehearsal completed all five two-hand rounds with the new five-second seating countdown and four-second reveals, verifying unique opponents, owner-only card privacy, conserved chips and final lobby scoring. The saved officer room was excluded from synthetic traffic. Browser checks covered the simplified player UI, projector orbit/base/player camera selection and sound unlock, skin-locker persistence and closed practice corridors; no new application errors were logged in the inspected final build. No new forty-laptop rendering benchmark was performed in this pass. Existing measured samples below remain the rendering evidence.
+
+# October 12 — casino polish follow-up
+
+The revision passed 121 tests and the production build. A warmed 30-avatar casino sample in one 1280×720 browser measured 17.8ms p95 frame interval and 6.64ms mean JS/render work, with 1,385 render calls and approximately 460,120 triangles. This is a single-browser sample, not a forty-laptop performance certification. Rounded and indexed geometry now batch together without merge errors; slot reels use animated texture offsets rather than rebuilding geometry. Reduced motion freezes ambient animation. Browser checks covered the illustrated tutorial, furniture, actual walking through the Poker practice entrance, and casino exploration.
+
+The revised build is on port 3000, with the original host key and all six saved profiles/scores verified unchanged. The disposable inspection port is closed. Earlier load rehearsals below remain the protocol evidence; none were run against the saved officer room.
+
 # October 11, 2026 — pre-Poker performance pass
 
 ## What was measured
@@ -40,3 +50,22 @@ Optional `PERF_FILE=/tmp/workshop-perf.json` on the server writes cumulative tic
 A proper host can improve server uplink and tunnel overhead. A domain name itself does not improve simulation or device rendering. Shared Wi-Fi still has shared airtime and can introduce congestion or different signal quality. Before the workshop, rehearse on the intended host with several officer laptops, check mute/low graphics and loading, then scale attendance. Cross-game normalization and Poker integration remain milestone 4 decisions.
 
 Final delivery checks: production on port 3000 served the latest hashed client, authenticated the unchanged host key, negotiated compression and retained all five saved profiles/scores. Browser result-layout measurement at 1280×720: wallet bottom 184px, results top 192px/bottom 625px, strategy prompt bottom 610px; content height equals panel height, so all three cards and the prompt fit. Test tabs and port-3015 preview were closed.
+
+October 12 visual follow-up: bounded main-lobby exhibition (three animated rigs, one greeter, batched decorative bulbs) adds no dynamic lights or particle arrays. Warmed one-player browser sample: p95 frame interval 18.3ms, mean work 2.0ms, 152 draw calls. The 99-test suite and build pass; platform motion and wardrobe persistence have targeted checks. The network stack is unchanged; the earlier 40-client figures above were not rerun or relabeled as October 12 measurements.
+
+
+October 12 advice-NPC follow-up: three decorative avatar rigs replace the laptop panda. Tips are local UI; no additional server participants or RPCs. Miniature animations use two head rigs, four prebuilt bubbles, one turret, one reusable shot and three existing card groups. The proximity bump is shared deterministic movement with a three-second per-player cooldown, excluded from saved profiles and scored worlds. Warmed one-player browser sample: p95 17.7ms, mean render work 2.5ms, 164 draw calls, 25,472 triangles. 104 tests/build pass; targeted tests verify cooldown, prediction/reconciliation and unchanged scores. Six production profiles and the retained host authentication were verified. Previous 40-client network measurements remain the applicable rehearsal; they were not rerun for this visual pass.
+
+## October 12: milestone 4 first implementation
+
+Final verification: **117 tests pass** and production build passes, retaining the existing >500kB bundle warning (final client JS approximately 739kB uncompressed). A disposable port-3020 rehearsal with **40 real WebSocket clients, 20 simultaneous tables**, passed all five **two-hand** rounds, rotating unique opponents, host/public vs owner card privacy, exactly-once round payouts, chip conservation and normalized final-lobby scoring. That test server was stopped. This Poker protocol test did not repeat campus/WAN measurements or certify forty rendered devices.
+
+Browser checks on the isolated port-3019 preview covered the three animated tutorial pages, ready/roam stage, automatic seating, contextual Check/Bet and Call/Fold, pause, close table camera, two-hand progression, roofless overview, demo player preview controls, persistent expanded host details, projector public table/standings panel, and actual-input walking through the right-hand corridor into independent lobby practice. A practice bet/fold resolved with no tournament score. No application console errors appeared in the inspected flows. Previous Crowd Rush/Battlefield behavior is covered by the retained suite; no synthetic clients joined the officer room.
+
+A warmed **30-panda casino overview** at the laptop test viewport sampled 120 frames: **18.2ms p95 frame interval, 21.3ms maximum, 4.83ms mean JS/render work**, 976 draw calls and 272,958 triangles. Scenery is batched by material, with fixed decorative NPC rigs, shared card/screen art and two interior point lights; normal/low graphics and reduced motion remain available. These figures are one browser/sample, not a guarantee for all laptop GPUs. Human room-detail acceptance, sound balance and full workshop timing remain rehearsal tasks.
+
+Two hands alternate first action. Twelve seconds × three maximum decisions × two hands + two two-second reveals bounds active play to approximately **76 seconds per round**, **6m20s across five rounds**, before host-controlled tutorials, exploration, pauses and discussion. Keep transitions concise for the user's 6–8-minute Poker target.
+
+Review artifacts: artifacts/kuhn-casino-overview.jpg, artifacts/kuhn-tutorial.jpg and artifacts/lobby-milestone4.jpg. The final preview is http://localhost:3019/?view=host, dummy preview key `poker-preview`, state `/tmp/kuhn-poker-preview-delivery.json`, client `/tmp/kuhn-poker-dist`. **Port 3000, the live host key, tunnel, saved officer profiles and raw scores were not replaced/restarted.** Production promotion remains coordinated work after first-pass review.
+
+October 12 production promotion: the user requested consolidation onto port 3000. The new `dist` build/server now run there with the retained host key and officer state. Read-only checks verified exact client build, successful host authentication, and unchanged six saved identities/appearances/raw scores. The port-3019 preview was stopped; port 3020 was already stopped. Only port 3000 listens in the game's 3000–3020 range. No synthetic clients joined the production room.

@@ -60,7 +60,7 @@ export class Battlefield {
     this.roster = this.demo
       ? this.demo.ids
       : [...game.players.values()]
-          .filter((p) => p.connected && !p.kicked && !p.demo)
+          .filter((p) => p.connected && !p.kicked && !p.demo && !p.officer)
           .map((p) => p.id);
     if (this.roster.length < 2)
       throw Error("Battlefield needs at least two players");
@@ -546,6 +546,7 @@ export class Battlefield {
         }
       }
     }
+    if (!this.paused && this.phase === "final" && this.game.now() >= this.deadline - 5000) this.spendAbsentResources();
     if (this.paused || !this.deadline || this.game.now() < this.deadline)
       return;
     if (this.phase === "matching") {
@@ -562,8 +563,24 @@ export class Battlefield {
       this.deadline = 0;
     }
   }
+  spendAbsentResources() {
+    // Spend only a disconnected member's leftovers, evenly across their fronts.
+    // No enemy orders or strength estimates enter this decision.
+    for (const team of this.teams) for (const id of team.members) {
+      const p=this.game.players.get(id);
+      if (!p || p.connected || p.kicked || p.waitingLobby || !(this.wallets[id]>0)) continue;
+      const fronts=this.fronts.filter(f=>[f.a,f.b].includes(team.id));
+      const amount=this.wallets[id], locked=this.locks[id];this.locks[id]=false;
+      try {
+        fronts.forEach((f,i)=>{const quantity=Math.floor(amount/fronts.length)+(i<amount%fronts.length?1:0);if(quantity)this.purchase(id,{front:f.id,unit:"troop",quantity,nonce:randomUUID(),volley:this.game.round},false,true);});
+        this.messages.push({team:team.id,name:"Barracks",text:`${p.name} disconnected. Their remaining ${amount} resources were deployed evenly as troops.`,id:++this.serial});
+        this.messages=this.messages.slice(-100);
+      } finally {this.locks[id]=locked;}
+    }
+  }
   countdown() {
     if (this.phase !== "final") return;
+    this.spendAbsentResources();
     this.phase = "countdown";
     this.deadline = this.game.now() + 5000;
   }
@@ -593,6 +610,7 @@ export class Battlefield {
         );
         for (const id of team.members) {
           const p = this.game.players.get(id);
+          p.eventsPlayed = {...p.eventsPlayed, battlefield:true};
           p.battlefieldScore =
             (p.battlefieldScore || 0) +
             this.results.reduce(

@@ -17,6 +17,7 @@ export function blottoResult(player, bot) {
 
 // World-space walls match the lobby room and leave an eight-unit entrance.
 export const BLOTTO_WALLS = [
+  { x: 26, z: 26, y: 2.75, w: .35, d: 6, h: 5.5 },
   { x: 30, z: 41, y: 2.75, w: 0.35, d: 24, h: 5.5 },
   { x: 14, z: 41, y: 2.75, w: 0.35, d: 24, h: 5.5 },
   { x: 22, z: 53, y: 2.75, w: 16, d: 0.35, h: 5.5 },

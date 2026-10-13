@@ -1,4 +1,9 @@
 import { BLOTTO_WALLS } from "./blotto.js";
+// Both side branches share a full-height wall before their doorway and a lintel above it.
+export const PRACTICE_HALL_WALLS = [-1,1].flatMap(side => [
+  {id:`practice-hall-${side}`,x:side*5.4,y:3,z:20,w:.3,h:6,d:6},
+  {id:`practice-lintel-${side}`,x:side*5.4,y:5.5,z:26,w:.3,h:1,d:6}
+]);
 // The renderer and authoritative simulation consume these same dimensions.
 export const STAGES = [
   {
@@ -11,7 +16,8 @@ export const STAGES = [
     id: 2,
     name: "Platform routes",
     duration: 45,
-    description: "Jump between wide platforms. Diamond has a moving landing.",
+    description:
+      "Jump between wide platforms. Diamond has a fast moving bridge to its high landing.",
   },
   {
     id: 3,
@@ -73,8 +79,8 @@ export function vaultsFor(stage = 2) {
   const vaults = endpoints[stage].map(([x, z, y], i) => ({
     id: IDS[i],
     name: IDS[i][0].toUpperCase() + IDS[i].slice(1),
-    x: stage > 1 ? x * (1 + 6 / Math.hypot(x,z-1)) : x,
-    z: stage > 1 ? 1 + (z-1) * (1 + 6 / Math.hypot(x,z-1)) : z,
+    x: stage > 1 ? x * (1 + 6 / Math.hypot(x, z - 1)) : x,
+    z: stage > 1 ? 1 + (z - 1) * (1 + 6 / Math.hypot(x, z - 1)) : z,
     y,
     color: COLORS[i],
     angle: Math.atan2(-x, 1 - z),
@@ -94,12 +100,15 @@ export function vaultsFor(stage = 2) {
 // Shared dome dimensions keep the rendered shield and staging collision aligned.
 export const STAGING_DOME = { radius: 6, z: 1 };
 export function arenaBounds(stage) {
-  const vaults = vaultsFor(stage).filter(v => v.id !== "sky");
+  const vaults = vaultsFor(stage).filter((v) => v.id !== "sky");
   const margin = 10; // Rotated 7×7 vault floors plus clear space before perimeter ribs.
   return {
-    side: Math.max(34, ...vaults.map(v => Math.abs(v.x) + margin)),
-    front: Math.max(stage >= 3 ? 28 : 8, ...vaults.map(v => v.z + margin)),
-    rear: Math.min(stage === 5 ? -55 : stage === 4 ? -47 : -39, ...vaults.map(v => v.z - margin)),
+    side: Math.max(34, ...vaults.map((v) => Math.abs(v.x) + margin)),
+    front: Math.max(stage >= 3 ? 28 : 8, ...vaults.map((v) => v.z + margin)),
+    rear: Math.min(
+      stage === 5 ? -55 : stage === 4 ? -47 : -39,
+      ...vaults.map((v) => v.z - margin),
+    ),
   };
 }
 // Flip transitions do not supply a walkable surface; the flat face and vertical
@@ -264,7 +273,9 @@ export function lobbyRegion(x, z) {
     (Math.abs(x) <= 5.2 && z >= 17 && z <= 30) ||
     (Math.abs(x) <= 12 && z >= 29 && z <= 62) ||
     (x >= 2 && x <= 26 && z >= 23 && z <= 30) ||
-    (x >= 14 && x <= 30 && z >= 29 && z <= 53)
+    (x >= 14 && x <= 30 && z >= 29 && z <= 53) ||
+    (x <= -2 && x >= -26 && z >= 23 && z <= 30) ||
+    (x <= -14 && x >= -30 && z >= 29 && z <= 53)
   );
 }
 export const ROUTES = vaultsFor(2);
@@ -336,7 +347,8 @@ export function platforms(time = 0, stage = 2) {
     for (let i = 1; i <= count; i++) {
       const t = i / count,
         length =
-          start + (end - start) * (i - 1) / (count - 1) +
+          start +
+          ((end - start) * (i - 1)) / (count - 1) +
           (stage === 2 && i >= Math.ceil(count * 0.65)
             ? (1.1 * (count - i)) / Math.max(1, count - Math.ceil(count * 0.65))
             : 0);
@@ -349,14 +361,18 @@ export function platforms(time = 0, stage = 2) {
         (stage >= 3 && index === 1 && i === Math.ceil(count * 0.7)) ||
         (stage >= 3 && index === 2 && i === count - 1);
       const shift = moving
-        ? Math.sin(time * { 2: 2.2, 3: 2.9, 4: 3.5, 5: 4.2 }[stage] + index) *
-          { 2: 0.8, 3: 1.05, 4: 1.15, 5: 1.45 }[stage]
+        ? Math.sin(time * { 2: 4.2, 3: 2.9, 4: 3.5, 5: 4.2 }[stage] + index) *
+          { 2: 1.45, 3: 1.05, 4: 1.15, 5: 1.45 }[stage]
         : 0;
       blocks.push({
         id: `${v.id}-${i}`,
         x: ux * length - uz * (stagger + shift),
         z: 1 + uz * length + ux * (stagger + shift),
-        y: stairHeight(v, count, i, stage),
+        // The moving diamond stone is a height bridge: skipping it exceeds the jump apex.
+        y:
+          stage === 2 && index === 2
+            ? [0, 0.72, 1.1, 2.25, 3.15][i]
+            : stairHeight(v, count, i, stage),
         w: stage >= 3 && i % 3 === 0 ? width + 0.65 : width,
         d: stage >= 3 && i % 3 === 0 ? width + 0.65 : width,
         h: 0.7,
@@ -499,6 +515,7 @@ export function solids(world, time = 0) {
   const furniture = [-1, 1].flatMap((side) => {
     const sofa = { x: side * 9, z: 0, angle: (-side * Math.PI) / 2 };
     return [
+      {id:`bookcase-${side}`,x:side*12.4,z:4.9,y:1.6,w:1.3,d:2.7,h:3.2},
       { ...sofa, id: `sofa-seat-${side}`, y: 0.4625, w: 4, d: 1.5, h: 0.925 },
       {
         ...toWorld({ x: 0, z: -0.7 }, sofa),
@@ -548,9 +565,14 @@ export function solids(world, time = 0) {
     h: 2.1,
   });
   return cacheSet(solidCache, key, [
-    {id:"blotto-hall-floor",x:13,z:26.5,y:-.3,w:26,d:7,h:.5},
-    ...BLOTTO_WALLS.map((b,i)=>({...b,id:"blotto-wall-"+i})),
-    {id:"blotto-room-floor",x:22,z:41,y:-.3,w:16,d:24,h:.5},
+    {id:"skin-locker",x:12,z:6,y:1.65,w:.8,d:2.4,h:3.3},
+    ...PRACTICE_HALL_WALLS,
+    ...BLOTTO_WALLS.map((b,i) => ({...b,x:-b.x,id:"poker-wall-"+i})),
+    { id:"poker-hall-floor",x:-13,z:26.5,y:-0.3,w:26,d:7,h:0.5 },
+    { id:"poker-room-floor",x:-22,z:41,y:-0.3,w:16,d:24,h:0.5 },
+    { id: "blotto-hall-floor", x: 13, z: 26.5, y: -0.3, w: 26, d: 7, h: 0.5 },
+    ...BLOTTO_WALLS.map((b, i) => ({ ...b, id: "blotto-wall-" + i })),
+    { id: "blotto-room-floor", x: 22, z: 41, y: -0.3, w: 16, d: 24, h: 0.5 },
     ...practicePlatforms(time).map((p) => ({ ...p, y: p.y - p.h / 2 })),
     {
       id: "practice-punch-wall",

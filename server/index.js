@@ -1,3 +1,4 @@
+import {allowUpgrade} from "./admission.js";
 import express from "express";
 import { createServer } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
@@ -20,6 +21,7 @@ const server = createServer(app);
 const wss = new WebSocketServer({
   server,
   maxPayload: 4096,
+  verifyClient: info=>allowUpgrade(info.req,wss.clients.size),
   // Frames are repetitive JSON. Bound compression work and avoid per-client retained contexts.
   perMessageDeflate: {
     threshold: 1024,
@@ -29,7 +31,7 @@ const wss = new WebSocketServer({
     zlibDeflateOptions: { level: 1 },
   },
 });
-if (process.env.NODE_ENV === "production") app.use(express.static("dist"));
+if (process.env.NODE_ENV === "production") app.use(express.static(process.env.CLIENT_DIST || "dist"));
 else {
   const { createServer } = await import("vite");
   const vite = await createServer({
@@ -93,6 +95,9 @@ function writeMetrics() {
   );
 }
 if (delay) setInterval(writeMetrics, 5000).unref();
+app.get("/health",(_req,res)=>res.json({ok:true,connections:wss.clients.size,players:[...game.players.values()].filter(p=>p.connected&&!p.demo).length}));
+let usageAt=Date.now(),usageBytes=0;
+setInterval(()=>{const at=Date.now();metrics.rawMbps=(metrics.bytes-usageBytes)*8/(at-usageAt)/1000;usageBytes=metrics.bytes;usageAt=at;},5000).unref();
 const equal = (a, b) => {
   const x = Buffer.from(String(a || "")),
     y = Buffer.from(b);
@@ -123,6 +128,15 @@ wss.on("connection", (ws) => {
       if (!m || typeof m !== "object") throw Error("Invalid request");
       if (m.type === "hostAuth") {
         ws.host = equal(m.key, hostKey);
+        // A refreshed host page starts its input counter again. Its disposable
+        // demo pilot must accept that new stream rather than ignore movement.
+        if (ws.host) {
+          const pilot = game.players.get(game.poker?.demo?.pilot || game.battlefield?.demo?.pilot);
+          if (pilot) {
+            pilot.inputSequence = pilot.inputAck = 0;
+            pilot.input = {};
+          }
+        }
         send(ws, { type: "auth", ok: ws.host });
         return;
       }
@@ -136,7 +150,7 @@ wss.on("connection", (ws) => {
                 m.action === "kickPlayer" ? 4002 : 4001,
                 "Removed by host",
               );
-        persist();
+        if(m.action!=="broadcast") persist();
         return;
       }
       if (m.type === "join") {
@@ -169,13 +183,24 @@ wss.on("connection", (ws) => {
         return;
       }
       const p = game.players.get(
-        ws.host && game.battlefield?.demo
+        ws.host && game.poker?.demo
+          ? game.poker.demo.pilot
+          : ws.host && game.battlefield?.demo
           ? game.battlefield.demo.pilot
           : ws.player,
       );
       if (!p) {
         if (ws.host && m.type === "input") return;
         throw Error("Join first");
+      }
+      if (m.type === "customize") {
+        const appearance = game.customize(p, m.appearance);
+        persist();
+        send(ws, { type: "customized", appearance });
+      }
+      if (m.type === "poker") {
+        if (!game.poker) throw Error("Poker is unavailable");
+        game.poker.act(p.id,m.action,m.data);
       }
       if (m.type === "battle") {
         if (!game.battlefield) throw Error("Battlefield is unavailable");
@@ -222,7 +247,8 @@ wss.on("connection", (ws) => {
 });
 let previous = Date.now(),
   lastPhase = game.phase,
-  lastBattleSerial = game.battlefieldSerial;
+  lastBattleSerial = game.battlefieldSerial,
+  lastPokerSerial = game.pokerSerial;
 setInterval(() => {
   const started = performance.now();
   const now = Date.now();
@@ -230,7 +256,8 @@ setInterval(() => {
     if (now - (p.lastInput || 0) > 1000) p.input = {};
   game.tick(Math.min((now - previous) / 1000, 0.1));
   previous = now;
-  if (game.phase !== lastPhase || game.battlefieldSerial !== lastBattleSerial) {
+  if (game.phase !== lastPhase || game.battlefieldSerial !== lastBattleSerial || game.pokerSerial !== lastPokerSerial) {
+    lastPokerSerial = game.pokerSerial;
     lastBattleSerial = game.battlefieldSerial;
     if (saveTimer) {
       clearTimeout(saveTimer);
@@ -252,12 +279,13 @@ setInterval(() => {
     }
     ws.slowSince = 0;
     const actor =
-      ws.host && game.battlefield?.demo
+      ws.host && game.poker?.demo
+        ? game.poker.demo.pilot
+        : ws.host && game.battlefield?.demo
         ? game.battlefield.demo.pilot
         : ws.player;
-    const data = actor
-      ? JSON.stringify({ type: "state", state: game.snapshotFor(actor, base) })
-      : payload;
+    const recipientState=actor?game.snapshotFor(actor,base):base;
+    const data = ws.host ? JSON.stringify({type:"state",state:{...recipientState,serverHealth:{connections:wss.clients.size,rawMbps:metrics.rawMbps||0,meanTickMs:metrics.tickMs/Math.max(1,metrics.ticks)}}}) : actor ? JSON.stringify({type:"state",state:recipientState}) : payload;
     ws.send(data);
     metrics.bytes += Buffer.byteLength(data);
   }

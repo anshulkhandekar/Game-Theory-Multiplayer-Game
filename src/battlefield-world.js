@@ -641,8 +641,15 @@ export function createBattlefieldWorld(scene, label) {
             distance -= length;
           }
         }
-        if (fighting && !reduced)
-          s.position.lerp(s.target, Math.min(0.25, progress * 0.025));
+        if (fighting) {
+          facing = Math.atan2(s.position.x-s.target.x,s.position.z-s.target.z);
+          s.facing=facing;
+          if (!reduced && s.type !== "fort") {
+            const advance=Math.min(.23,progress*.028);
+            s.position.lerp(s.target,advance);
+            if(s.type==="troop") s.position.y=.06+Math.abs(Math.sin(clock*10+s.index))*.1;
+          }
+        } else s.facing=facing;
         if (s.type === "troop" && !reduced && travel > 0 && travel < 1)
           s.position.y += Math.abs(Math.sin(age * 11)) * 0.12;
         quaternion.setFromAxisAngle(axis, facing);
@@ -699,7 +706,7 @@ export function createBattlefieldWorld(scene, label) {
           (!low || i % 2 === 0) &&
           weaponCycle(clock, s.type, s.index) < 0.09;
         const pos = muzzlePosition.set(...local);
-        quaternion.setFromAxisAngle(axis, s.angle);
+        quaternion.setFromAxisAngle(axis, s.facing ?? s.angle);
         pos.applyQuaternion(quaternion).add(s.position);
         matrix.compose(
           pos,

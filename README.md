@@ -193,3 +193,29 @@ Battlefield maps include tiled sand/grass/rock detail, a distant club hangar usi
 Latest Battlefield feedback polish adds binoculars (**1**, mouse look, **1/Escape** to exit), open roaming after combat begins (home barriers return next round), clearer three-front result cards and strategy questions, separated HUD/countdown layout, cloud sky, aircraft on both sides, articulated robot pandas, recoil/muzzle flashes and differentiated positional combat/ambient audio. The lobby hallway is wider and labels Game 1 parkour straight ahead and Game 2 Blotto to the left while facing parkour. Its room is enclosed and lit, with floor arrows. **Menu → Workshop info · 3 games** explains the workshop goal and upcoming Game 3 practice. See the host guide for full controls.
 
 The final pre-Poker pass adds distinct Battlefield backdrop structures, three clearly paired lanes in two-team demos, a wallet showing personal and team unspent resources, distant gunfire/artillery, nonoverlapping lobby practice floors, and Crowd Rush stage lighting/balconies with a physical red timer in all five arenas. Game rules are unchanged. See [PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md) for the 40-client rehearsals, traffic protections and hosting limits. Input/action flood checks are `TEST_URL=ws://localhost:3016 HOST_KEY=battlefield-local node tests/traffic-load.mjs` against a disposable room only.
+
+October 12 finishing pass: readable Crowd Rush wall boards; round-2 diamond bridge with round-5 motion; Field helmet/Frog hat/Rubber duck and Panda patrol/Space cadet/Noodle club outfits; repaired Jane Street print; **Randomize outfit** below the entrance selectors; three-games/one-score/prize teaser; and a waving panda with animated miniature game exhibits in the main lobby. Lobby practice areas are unchanged. All 99 tests pass; HANDOFF.md now points to milestone 4 Poker.
+
+Reference follow-up: the Jane Street shirt uses the supplied blue logo on light fabric. The lobby greeter is now a seated 3D panda with a club laptop and typing animation. The miniature J/Q/K exhibition uses proper playing-card faces and patterned backs; Poker gameplay remains milestone 4.
+
+## October 12: Kuhn Poker first pass
+
+See [POKER_HOST_GUIDE.md](POKER_HOST_GUIDE.md) for five rounds of two-player Kuhn Poker, officer/bot odd-seat fallback, the casino demo and right-side lobby practice. Lobby standings now show equal-weight tournament points (100 per activity), with separate raw scores preserved. The initial review build runs at http://localhost:3019/?view=host with preview key `poker-preview`; the existing port-3000 officer room is unchanged pending coordinated promotion. Earlier Poker-pending/raw-sum notes are historical. The practice jump pad now accepts landings, and additional game-theory prints and furnishings decorate the lobby.
+
+October 12 runtime promotion: at the user's request, the completed Kuhn Poker build now runs on **port 3000** with the original officer host key and `data/officer-test.json`; all six profiles/scores were verified unchanged. Temporary game ports are closed. Refresh existing tabs. Preview-only notes above are historical.
+
+## October 12 casino polish revision
+
+The revised lobby props, open Poker practice entrance, flat floor arrows, animated casino machines, varied decorative pandas and illustrated interactive Poker tutorial are live on port 3000. Refresh existing tabs. The host key and saved profiles/scores are retained. See HANDOFF.md for the current verification record and POKER_HOST_GUIDE.md for controls.
+
+## Workshop refinement controls
+
+The latest pass is live on port 3000. In the lobby, use the hovering practice arrows and approach the skin locker to press Enter and change your outfit without rejoining. The entrance’s Datathon mark opens the registration/event page. Poker seating now includes a five-second countdown before the first card, with clearer decision and chip-result panels. On the projector, open Broadcast camera & sound for player follow, Battlefield base focus, casino orbit, zoom and audio unlock. See POKER_HOST_GUIDE.md and the current HANDOFF.md for details.
+
+## Final polish restart checkpoint
+
+Latest code is built and tested (132 tests and 40-player Poker rehearsal). Port 3000 was found stopped; production restart must use the original host key and data/officer-test.json. See the current HANDOFF.md for exact restart/verification steps. HOSTING_GUIDE.md explains deployment, costs, persistence and traffic protections. Projector camera controls now live only in the admin's Projector broadcast panel; point focus uses right-click on the admin scene.
+
+## Live local server after final polish
+
+The finished build is running on port 3000 with the saved officer profiles/scores preserved. The local host key and launch settings are in the ignored `.env` file. Restart with `node --env-file=.env server/index.js`. Plain `npm start` does not load that file automatically. The user authorized a new host key and received it in chat. See the current HANDOFF.md for completed verification.

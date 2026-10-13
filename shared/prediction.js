@@ -14,7 +14,7 @@ export class Predictor {
   apply(c) {
     if(!this.player || !canMove(this.state,this.player))return;
     const staging=["loading","countdown"].includes(this.state.phase);
-    if(!staging)this.time+=c.dt;move(this.player,c.input,c.dt,this.state.world,this.time,staging,this.state.battlefield);
+    if(!staging)this.time+=c.dt;move(this.player,c.input,c.dt,this.state.world,this.time,staging,(this.state.battlefield || this.state.poker));
   }
   input(seq,input,dt=.05) {
     const command={seq,input:{...input},dt:Math.max(0,Math.min(.1,dt))};
@@ -26,7 +26,7 @@ export class Predictor {
   preview(input,dt) {
     if(!this.player)return null;
     const p={...this.player};
-    if(canMove(this.state,p))move(p,input,Math.max(0,Math.min(.05,dt)),this.state.world,this.time+(["loading","countdown"].includes(this.state.phase)?0:Math.min(.05,dt)),["loading","countdown"].includes(this.state.phase),this.state.battlefield);
+    if(canMove(this.state,p))move(p,input,Math.max(0,Math.min(.05,dt)),this.state.world,this.time+(["loading","countdown"].includes(this.state.phase)?0:Math.min(.05,dt)),["loading","countdown"].includes(this.state.phase),(this.state.battlefield || this.state.poker));
     return p;
   }
 }

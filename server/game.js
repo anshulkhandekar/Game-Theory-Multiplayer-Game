@@ -1,3 +1,6 @@
+import {defaultBroadcast,updateBroadcast} from "../shared/broadcast.js";
+import { Poker } from './poker.js';
+import { tournamentScores } from '../shared/tournament.js';
 import { teamPlan } from "../shared/battlefield.js";
 import { Battlefield } from "./battlefield.js";
 import { EMOTE_SECONDS, canEmote } from "../shared/emotes.js";
@@ -27,6 +30,8 @@ export class Game {
   } = {}) {
     this.now = now;
     this.battlefield = null;
+    this.poker = null;
+    this.pokerSerial = 0;
     this.battlefieldSerial = 0;
     this.duration = duration;
     this.practiceDuration = practiceDuration;
@@ -43,6 +48,7 @@ export class Game {
         p.name = "Bear";
       }
     }
+    this.broadcast=defaultBroadcast();
     this.world = "lobby";
     this.stage = 1;
     this.worldTime = 0;
@@ -63,6 +69,8 @@ export class Game {
   join(id, name, appearance = {}, connection = null) {
     let p = [...this.players.values()].find((p) => p.token === id);
     if (!p) {
+      if([...this.players.values()].filter(p=>p.connected&&!p.demo&&!p.kicked).length>=40) throw Error("The room already has 40 players. Ask the host for help.");
+      if([...this.players.values()].filter(p=>!p.demo).length>=300) throw Error("The room has reached its profile limit. Ask the host for help.");
       p = {
         id: randomUUID(),
         token: randomUUID(),
@@ -86,6 +94,7 @@ export class Game {
       if (
         !resume &&
         !this.battlefield?.teamOf(p.id) &&
+        !this.poker?.roster.includes(p.id) &&
         this.world !== "lobby" &&
         this.phase !== "loading"
       ) {
@@ -117,7 +126,7 @@ export class Game {
       p.vx = p.vy = p.vz = 0;
       p.grounded = true;
     }
-    if (this.phase === "loading" && !p.eligible && !p.waitingLobby) {
+    if (this.phase === "loading" && !p.eligible && !p.waitingLobby && !p.officer) {
       const angle =
         [...this.players.values()].findIndex((other) => other.id === p.id) *
         2.4;
@@ -144,8 +153,14 @@ export class Game {
       p.waitingLobby = true;
       p.eligible = false;
     }
+    if (this.poker) {
+      p.waitingLobby = !this.poker.roster.includes(p.id);
+      p.eligible = !p.waitingLobby;
+      if (p.pokerRemoved) {p.waitingLobby=true;p.eligible=false;}
+      if (!p.waitingLobby && this.poker.phase !== 'instructions') this.poker.seat(this.poker.tableOf(p.id));
+    }
     p.connected = true;
-    if (this.battlefield?.phase === "matching" && !this.battlefield.demo) {
+    if (this.battlefield?.phase === "matching" && !this.battlefield.demo && !p.officer) {
       if (
         !this.battlefield.roster.includes(p.id) &&
         this.battlefield.roster.length < 40
@@ -218,6 +233,14 @@ export class Game {
     appropriateText(clean);
     return clean;
   }
+  customize(p, appearance) {
+    if (this.world !== "lobby" || this.phase !== "lobby" || !p.connected || p.kicked || p.demo)
+      throw Error("Change your outfit while waiting in the main lobby.");
+    p.appearance = this.appearance(appearance);
+    this.stopEmote(p);
+    p.input = {};
+    return p.appearance;
+  }
   appearance(a) {
     return normalizeAppearance(a);
   }
@@ -257,6 +280,26 @@ export class Game {
     });
   }
   command(action, data = {}) {
+    if(action === "broadcast"){this.broadcast=updateBroadcast(this.broadcast,data,this);return;}
+    if (action === 'officer') {
+      if (this.phase !== 'lobby') throw Error('Assign officers in the lobby');
+      const p = this.players.get(data.id); if (!p || p.demo) throw Error('Unknown player');
+      p.officer = !!data.officer; p.eligible = false; return;
+    }
+    if (action === 'poker' || action === 'pokerDemo') {
+      if (!['lobby','results'].includes(this.phase)) throw Error('Return to the lobby first');
+      const count = data.count;
+      if (action === 'pokerDemo' && (!Number.isInteger(count) || count < 2 || count > 40)) throw Error('Choose 2–40 participants');
+      const n = [...this.players.values()].filter(p => p.connected && !p.officer && !p.kicked && !p.demo).length;
+      if (action === 'poker' && (n < 1 || n > 40)) throw Error('Poker needs 1–40 participants');
+      this.command('lobby'); this.poker = new Poker(this, action === 'pokerDemo' ? {demoCount:count} : {});
+      this.phase = 'poker'; this.world = 'casino'; this.round++; return;
+    }
+    if (action.startsWith('poker:')) {
+      if (!this.poker) throw Error('Load Poker first'); this.poker.command(action.slice(6),data); return;
+    }
+    if (this.poker && ['pause','resume'].includes(action)) {this.poker.command(action,data);return;}
+    if (this.poker && !['lobby','leaderboard','playerLobby','disconnectPlayer','kickPlayer','allowPlayer'].includes(action)) throw Error('Use the Poker controls');
     if (["battlefield", "battlefieldDemo"].includes(action)) {
       if (!["lobby", "results"].includes(this.phase))
         throw Error("Finish the current activity first");
@@ -264,13 +307,13 @@ export class Game {
         teamPlan(data.count, data.preferred || 3);
       else if (
         [...this.players.values()].filter(
-          (p) => p.connected && !p.kicked && !p.demo,
+          (p) => p.connected && !p.kicked && !p.demo && !p.officer,
         ).length > 40
       )
         throw Error("Battlefield supports up to 40 participants");
       else if (
         [...this.players.values()].filter(
-          (p) => p.connected && !p.kicked && !p.demo,
+          (p) => p.connected && !p.kicked && !p.demo && !p.officer,
         ).length < 2
       )
         throw Error(
@@ -332,6 +375,7 @@ export class Game {
         return;
       }
       this.sendToLobby(p);
+      if (this.poker) {p.waitingLobby=true;p.pokerRemoved=true;}
       if (this.battlefield) {
         p.waitingLobby = true;
         if (this.battlefield.phase === "matching")
@@ -384,12 +428,14 @@ export class Game {
     if (action === "lobby") {
       for (const [id, p] of this.players) if (p.demo) this.players.delete(id);
       this.battlefield = null;
+      this.poker = null;
       this.world = "lobby";
       this.phase = "lobby";
       this.paused = false;
       for (const p of this.players.values()) {
         this.stopEmote(p);
         p.waitingLobby = false;
+        delete p.pokerRemoved;
         p.eligible = false;
         p.ready = false;
         p.x = 0;
@@ -495,7 +541,7 @@ export class Game {
       reward: this.rewardPools[v.id],
     }));
     this.deadline = 0;
-    const ps = [...this.players.values()].filter((p) => p.connected);
+    const ps = [...this.players.values()].filter((p) => p.connected && !p.officer);
     ps.forEach((p, i) => {
       const a = (i / ps.length) * Math.PI * 2;
       p.x = Math.cos(a) * 2.5;
@@ -519,7 +565,7 @@ export class Game {
       p.loaded = false;
       p.input = {};
     });
-    for (const p of this.players.values()) if (!p.connected) p.eligible = false;
+    for (const p of this.players.values()) if (!p.connected || p.officer) {p.eligible = false; if(p.officer)p.waitingLobby=true;}
   }
   zone(p) {
     return this.vaults.find((v) => insideVault(p, v))?.id || null;
@@ -543,7 +589,7 @@ export class Game {
         const vault = p.connected ? this.zone(p) : null;
         const v = this.vaults.find((v) => v.id === vault);
         const payout = v ? v.reward / counts[v.id] : 0;
-        if (!this.practice) p.earnings += payout;
+        if (!this.practice) {p.earnings += payout; p.eventsPlayed = {...p.eventsPlayed, crowd:true};}
         return {
           id: p.id,
           name: p.name,
@@ -560,6 +606,11 @@ export class Game {
     this.deadline = 0;
   }
   tick(dt) {
+    if (this.poker) {
+      this.poker.tick(dt);
+      if (!this.poker.paused) {this.worldTime += dt; this.lobbyTime += dt;}
+      return;
+    }
     if (this.phase === "battlefield" && this.battlefield) {
       for (const p of this.players.values())
         if (p.emoteActive && this.now() >= p.emoteEndsAt) this.stopEmote(p);
@@ -676,6 +727,7 @@ export class Game {
   }
   snapshotFor(playerId, publicState = this.snapshot()) {
     const state = { ...publicState };
+    if (this.poker) state.poker = this.poker.snapshot(playerId);
     if (this.battlefield)
       state.battlefield = this.battlefield.snapshot(
         playerId,
@@ -689,8 +741,9 @@ export class Game {
     if (!this.players.get(playerId)?.waitingLobby) return state;
     return {
       ...state,
+      poker: null,
       activity: {
-        kind: this.battlefield ? "battlefield" : "crowd",
+        kind: this.poker ? "poker" : this.battlefield ? "battlefield" : "crowd",
         phase: state.phase,
         remaining: state.remaining,
         stage: state.stage,
@@ -706,7 +759,10 @@ export class Game {
     };
   }
   snapshot() {
+    const points = tournamentScores([...this.players.values()]);
     return {
+      broadcast:this.broadcast,
+      poker: this.poker?.snapshot() || null,
       phase: this.phase,
       battlefield: this.battlefield?.snapshot() || null,
       leaderboardSerial: this.leaderboardSerial,
@@ -717,14 +773,14 @@ export class Game {
       round: this.round,
       scoredRound: this.scoredRound,
       practice: this.practice,
-      paused: this.battlefield?.paused ?? this.paused,
+      paused: this.poker?.paused ?? this.battlefield?.paused ?? this.paused,
       remaining: this.paused
         ? this.remaining / 1000
         : Math.max(0, (this.deadline - this.now()) / 1000),
       duration: this.duration,
       rewardPools: this.rewardPools,
-      vaults: this.battlefield ? [] : this.vaults,
-      occupancy: this.battlefield ? {} : this.occupancy(),
+      vaults: this.battlefield || this.poker ? [] : this.vaults,
+      occupancy: this.battlefield || this.poker ? {} : this.occupancy(),
       results: this.results,
       messages: this.messages.filter((m) =>
         this.world === "lobby" ? m.kind === "chat" : m.kind === "event",
@@ -740,6 +796,7 @@ export class Game {
           ...p
         }) => ({
           ...p,
+          tournament: points.get(p.id),
           zone: this.zone(p),
           emoteFadeAge: (this.now() - (p.emoteStoppedAt ?? -10000)) / 1000,
           emoteAge: (this.now() - (p.emoteAt ?? -10000)) / 1000,
@@ -752,7 +809,7 @@ export class Game {
       scoredRound: this.scoredRound,
       players: [...this.players.values()]
         .filter((p) => !p.demo)
-        .map(({ input, vy, inputSequence, inputAck, pageId, ...p }) => p),
+        .map(({ input, vy, inputSequence, inputAck, pageId, lobbyTankAt, pokerRemoved, ...p }) => p),
     };
   }
 }
