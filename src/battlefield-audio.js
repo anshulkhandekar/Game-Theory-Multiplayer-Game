@@ -176,7 +176,7 @@ export function createBattlefieldAudio({ context, enabled, noise, cue }) {
         dz = p.z - listener.z,
         distance = Math.hypot(dx, dz);
       return {
-        volume: Math.max(0.04, (1 - Math.min(1, distance / range)) ** 2),
+        volume: Math.max(listener.projector ? 0.22 : 0.04, (1 - Math.min(1, distance / range)) ** 2),
         pan: Math.max(
           -0.8,
           Math.min(0.8, (-dx * Math.cos(yaw) + dz * Math.sin(yaw)) / range),
@@ -184,6 +184,7 @@ export function createBattlefieldAudio({ context, enabled, noise, cue }) {
       };
     };
     // No persistent loops: short bounded voices follow the shared aircraft positions.
+    const distantAllowed=!(listener.projector && b.phase==="reveal");
     const routes = aircraftAt(time, positions),
       nearJet = routes
         .slice(0, 6)
@@ -192,19 +193,19 @@ export function createBattlefieldAudio({ context, enabled, noise, cue }) {
             Math.hypot(a.x - listener.x, a.z - listener.z) -
             Math.hypot(b.x - listener.x, b.z - listener.z),
         )[0];
-    if (due("jet", Math.floor(time / 7))) {
+    if (distantAllowed && due("jet", Math.floor(time / 7))) {
       const at = spatial(nearJet, 400);
       play("jet", 0.025 * at.volume, at.pan);
     }
-    if (due("helicopter", Math.floor((time + 3) / 9))) {
+    if (distantAllowed && due("helicopter", Math.floor((time + 3) / 9))) {
       const at = spatial(routes[6], 350);
       play("helicopter", 0.022 * at.volume, at.pan);
     }
-    if (due("robot", Math.floor((time + 1) / 6))) {
+    if (distantAllowed && due("robot", Math.floor((time + 1) / 6))) {
       const at = spatial({ x: 65, z: bounds.hangarZ + 45 }, 500);
       play("robot", 0.025 * at.volume, at.pan);
     }
-    if (due("distant-impact", Math.floor((time + 4) / 11))) {
+    if (distantAllowed && due("distant-impact", Math.floor((time + 4) / 11))) {
       const at = spatial({ x: 0, z: bounds.hangarZ + 50 }, 500);
       play("explosion", 0.03 * at.volume, at.pan);
     }
@@ -236,6 +237,7 @@ export function createBattlefieldAudio({ context, enabled, noise, cue }) {
     if (b.phase === "reveal") {
       if (fight !== state.round) {
         fight = state.round;
+        if(listener.projector)stop();
         cue("warHorn");
       }
       const sources = positions.map((p) => ({

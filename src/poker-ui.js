@@ -1,3 +1,4 @@
+import { pokerVocabulary } from "./poker-vocabulary.js";
 import {pokerAudience} from "./broadcast-audience.js";
 import { renderPokerTable, renderPokerResults } from "./poker-table-ui.js";
 import { pokerLesson, lessonTitles } from "./poker-lessons.js";
@@ -271,7 +272,7 @@ export function createPokerUI({ send, escape, view, toast, scene }) {
     },
   };
 }
-export function createPokerPractice(audio) {
+export function createPokerPractice(audio, {onOpen=()=>{}, onClose=()=>{}} = {}) {
   const root = document.createElement("section");
   root.id = "poker-practice";
   root.hidden = true;
@@ -320,7 +321,7 @@ export function createPokerPractice(audio) {
     if (turn === 1 && !result) choose(botAction(cards[1], actions.join(",")));
   }
   function render() {
-    root.innerHTML = `<button data-close class="blotto-close" aria-label="Close practice">×</button><h2>Kuhn Poker practice</h2><p>Try a hand against the panda dealer. You each receive one hidden card and pay a one-chip ante. King beats Queen, and Queen beats Jack.</p><div class="poker-hand">${card(cards[0], "Your card")}${card(result?.showdown ? cards[1] : null, "Panda dealer")}</div><p>${result ? (result.winner === 0 ? "You win" : "Dealer wins") + ". You " + (result.winner === 0 ? "gain " : "lose ") + result.amount + " chip" + (result.amount === 2 ? "s" : "") + " overall." : legalActions(actions.join(",")).includes("call") ? "The dealer bet 1. Match it to compare cards, or give up your ante." : "Check to pass, or bet 1 to ask the dealer to call or fold."}</p><div class="poker-history">${actions.join(" → ") || "Both ante 1. You act first."}</div><div class="poker-decisions">${
+    root.innerHTML = `<button data-close class="blotto-close" aria-label="Close practice">×</button><h2>Kuhn Poker practice</h2>${pokerVocabulary()}<p>Try a hand against the panda dealer. You each receive one hidden card and pay a one-chip ante. King beats Queen, and Queen beats Jack.</p><div class="poker-hand">${card(cards[0], "Your card")}${card(result?.showdown ? cards[1] : null, "Panda dealer")}</div><p class="${result ? result.winner===0 ? "practice-win" : "practice-loss" : ""}">${result ? (result.winner === 0 ? "You win" : "Dealer wins") + ". You " + (result.winner === 0 ? "gain " : "lose ") + result.amount + " chip" + (result.amount === 2 ? "s" : "") + " overall." : legalActions(actions.join(",")).includes("call") ? "The dealer bet 1. Match it to compare cards, or give up your ante." : "Check to pass, or bet 1 to ask the dealer to call or fold."}</p><div class="poker-history">${actions.map((a,i)=>`${(first+i)%2===0 ? "You" : "Dealer"} ${{check:"checked",bet:"bet 1",call:"called",fold:"folded"}[a]}`).join(" · ") || `Both ante 1. ${first===0 ? "You act first." : "The dealer acts first."}`}</div><div class="poker-decisions ${!result ? "practice-choices" : ""}">${
       result
         ? "<button data-again>Deal next hand</button>"
         : legalActions(actions.join(","))
@@ -329,14 +330,20 @@ export function createPokerPractice(audio) {
                 `<button data-act="${a}"><b>${a[0].toUpperCase() + a.slice(1)}</b><small>${meanings[a]}</small></button>`,
             )
             .join("")
-    }</div><p>Your chip balance in this practice is ${net}. Take as long as you need; practice does not change workshop points.</p><small>A bet can be a strong card or a bluff. The dealer uses its own card and your actions; it cannot see yours.</small>`;
+    }</div><p>Your chip balance in this practice is ${net}. Take as long as you need; practice does not change workshop points.</p><p class="blotto-note">Space or × to leave your seat</p>`;
+  }
+  function close() {
+    if (!open) return;
+    open=false; root.hidden=true; onClose();
   }
   function show() {
+    if (open) return true;
     if (!near || document.querySelector("#overlay")?.children.length)
       return false;
     open = true;
     root.hidden = false;
     prompt.hidden = true;
+    onOpen();
     hands = 0;
     net = 0;
     deal();
@@ -347,8 +354,7 @@ export function createPokerPractice(audio) {
     const b = e.target.closest("button");
     if (!b) return;
     if (b.hasAttribute("data-close")) {
-      open = false;
-      root.hidden = true;
+      close();
     }
     if (b.hasAttribute("data-again")) deal();
     if (b.dataset.act && !result && turn === 0) {
@@ -359,10 +365,8 @@ export function createPokerPractice(audio) {
   };
   return {
     open: show,
-    close() {
-      open = false;
-      root.hidden = true;
-    },
+    close,
+    get active(){return open;},
     update(state, id) {
       near =
         state.world === "lobby" &&
@@ -370,8 +374,7 @@ export function createPokerPractice(audio) {
         !state.poker &&
         inPokerRoom(state.players.find((p) => p.id === id));
       if (!near) {
-        open = false;
-        root.hidden = true;
+        close();
       }
       prompt.hidden = !near || open;
     },

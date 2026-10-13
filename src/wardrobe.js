@@ -49,7 +49,7 @@ export function dressBear(rig, arms, appearance, accent) {
   const shirt = palette[appearance.shirt];
   if (shirt) {
     piece(
-      new THREE.SphereGeometry(0.493, 24, 16, 0, Math.PI * 2, 0.53, 1.96),
+      new THREE.SphereGeometry(0.493, 24, 16, 0, Math.PI * 2, 0.28, 2.21),
       shirt,
       0,
       0.78,
@@ -58,13 +58,13 @@ export function dressBear(rig, arms, appearance, accent) {
     // Sleeve caps share each shoulder hinge, including emotes.
     for (const arm of arms)
       piece(
-        new THREE.SphereGeometry(0.184, 12, 8),
+        new THREE.SphereGeometry(0.195, 16, 10),
         shirt,
         0,
-        -0.1,
+        -0.075,
         0,
         arm,
-      ).scale.set(1, 0.72, 1);
+      ).scale.set(1.04, 0.97, 1.04);
     const collar = piece(
       new THREE.TorusGeometry(0.275, 0.026, 8, 28),
       shirt,

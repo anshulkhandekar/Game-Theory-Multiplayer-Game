@@ -1,3 +1,6 @@
+const decoders = new WeakMap();
+const readMessage = (ws, raw) => { const m = JSON.parse(raw); if(m.type === "state") { if(!decoders.has(ws)) decoders.set(ws, snapshotDecoder()); m.state = decoders.get(ws)(m.state); } return m; };
+import {snapshotDecoder} from "../shared/snapshot-stream.js";
 import WebSocket from "ws";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -6,13 +9,13 @@ const url = process.env.TEST_URL || "ws://localhost:3015",
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const clients = [];
 async function connect(name, options) {
-  const ws = new WebSocket(url, options),
+  const ws = new WebSocket(url, {...options, headers:{"x-workshop-code":process.env.EVENT_CODE || ""}}),
     c = { ws, state: null, id: null, frames: [], errors: [], closed: null };
   clients.push(c);
   ws.on("error", () => {});
   ws.on("close", (code) => (c.closed = code));
   ws.on("message", (raw) => {
-    const m = JSON.parse(raw);
+    const m = readMessage(ws, raw);
     if (m.type === "state") {
       c.state = m.state;
       c.frames.push(performance.now());
@@ -77,7 +80,7 @@ try {
   oversized.ws.send("x".repeat(5000));
   await sleep(300);
   assert.equal(oversized.closed, 1009);
-  const slow = await connect("SlowReader", { perMessageDeflate: false });
+  const slow = await connect(undefined, { perMessageDeflate: false });
   await sleep(200);
   slow.ws._socket.pause();
   // Allow the OS TCP receive window to fill before checking server backpressure.

@@ -1,3 +1,4 @@
+import { buildBlottoCommander } from "./blotto-commander.js";
 import * as THREE from "three";
 import { inBlottoRoom, blottoResult, BLOTTO_WALLS } from "../shared/blotto.js";
 export function buildBlottoRoom(parent, label) {
@@ -48,28 +49,17 @@ export function buildBlottoRoom(parent, label) {
   const welcome = label("Press E · Your own bot match", "#dcecc4", 7);
   welcome.position.set(22, 3, 46);
   root.add(welcome);
-  // A small panda bot waits across the table; everyone plays their own local match.
-  const bot = new THREE.Group();
-  bot.position.set(22, 0, 46);
-  root.add(bot);
-  const sphere = (x, y, z, r, color) => {
-    const m = new THREE.Mesh(
-      new THREE.SphereGeometry(r, 12, 8),
-      new THREE.MeshStandardMaterial({ color }),
-    );
-    m.position.set(x, y, z);
-    bot.add(m);
-  };
-  sphere(0, 1.1, 0, 0.7, "#deded4");
-  sphere(0, 2.1, 0, 0.65, "#f4f1df");
-  for (const s of [-1, 1]) {
-    sphere(s * 0.48, 2.55, 0, 0.24, "#293c46");
-    sphere(s * 0.24, 2.15, -0.55, 0.18, "#293c46");
-    sphere(s * 0.38, 0.35, 0, 0.27, "#293c46");
+  title.userData.practiceSign = welcome.userData.practiceSign = true;
+  // Chairs give the player and dealer clear positions across the table.
+  for (const z of [40.85,46]) {
+    mesh(-22,.6,z,1.3,.22,1.3,"#493a56");
+    mesh(-22,1.25,z+(z<43?-.55:.55),1.3,1.15,.16,"#493a56");
+    for (const x of [-22.5,-21.5]) mesh(x,.28,z,.12,.55,1,"#b89d69");
   }
+  buildBlottoCommander(root);
   return root;
 }
-export function createBlottoPractice(audio) {
+export function createBlottoPractice(audio, {onOpen=()=>{}, onClose=()=>{}} = {}) {
   const panel = document.createElement("section");
   panel.id = "blotto-practice";
   panel.hidden = true;
@@ -99,14 +89,20 @@ export function createBlottoPractice(audio) {
   }
   function render() {
     const result = phase === "results" ? blottoResult(cards, bot) : null;
-    panel.innerHTML = `<button data-close class="blotto-close" aria-label="Close practice">×</button><h2>Colonel Blotto</h2><p>Place your 1, 2 and 3 cards across three fronts. The bot has the same cards. Win more fronts to win.</p><div class="blotto-cards">${[1, 2, 3].map((n) => `<button data-card="${n}" class="${selected === n ? "selected" : ""}" ${phase !== "placing" ? "disabled" : ""}>${n}<small>${cards.includes(n) ? "Placed" : "Strength"}</small></button>`).join("")}</div><div class="blotto-fronts">${cards.map((n, i) => `<button data-front="${i}" ${phase !== "placing" ? "disabled" : ""}><span>Front ${i + 1}</span><b>${n ?? "Place card"}</b><i class="${phase === "revealing" ? "card-reveal" : ""}">Bot: ${phase === "results" ? bot[i] : "?"}</i>${result ? `<small>${result.fronts[i] > 0 ? "Win" : result.fronts[i] < 0 ? "Loss" : "Tie"}</small>` : ""}</button>`).join("")}</div><p aria-live="polite">${result ? result.outcome + " · " + result.wins + " wins, " + result.losses + " losses" : phase === "revealing" ? "Revealing the bot’s cards…" : "Choose a card, then choose its front."}</p>${phase === "placing" ? `<button data-fight ${cards.includes(null) ? "disabled" : ""}>Reveal & fight</button>` : phase === "results" ? "<button data-again>Play again</button>" : ""}<p class="blotto-note">Practice only · No points or purchases</p>`;
+    panel.innerHTML = `<button data-close class="blotto-close" aria-label="Close practice">×</button><h2>Colonel Blotto</h2><p>Place your 1, 2 and 3 cards across three fronts. The bot has the same cards. Win more fronts to win.</p><div class="blotto-cards">${[1, 2, 3].map((n) => `<button data-card="${n}" class="${selected === n ? "selected" : ""}" ${phase !== "placing" ? "disabled" : ""}>${n}<small>${cards.includes(n) ? "Placed" : "Strength"}</small></button>`).join("")}</div><div class="blotto-fronts">${cards.map((n, i) => `<button data-front="${i}" class="${result ? result.fronts[i]>0 ? "practice-win" : result.fronts[i]<0 ? "practice-loss" : "practice-tie" : phase==="placing" && n===null ? "place-target" : ""}" ${phase !== "placing" ? "disabled" : ""}><span>Front ${i + 1}</span><b>${n ?? "Place card"}</b><i class="${phase === "revealing" ? "card-reveal" : ""}">Bot: ${phase === "results" ? bot[i] : "?"}</i>${result ? `<small>${result.fronts[i] > 0 ? "You won this front" : result.fronts[i] < 0 ? "Bot won this front" : "Front tied"}</small>` : ""}</button>`).join("")}</div><p aria-live="polite">${result ? `${result.outcome}. You won ${result.wins} front${result.wins===1 ? "" : "s"} and lost ${result.losses}.` : phase === "revealing" ? "Revealing the bot’s cards…" : `Select a front below to place your ${selected} card.`}</p>${phase === "placing" ? `<button data-fight ${cards.includes(null) ? "disabled" : ""}>Reveal & fight</button>` : phase === "results" ? "<button data-again>Play again</button>" : ""}<p class="blotto-note">Practice only · Space or × to leave your seat</p>`;
+  }
+  function close() {
+    if (!open) return;
+    open=false; panel.hidden=true; onClose();
   }
   function show() {
+    if (open) return true;
     if (!near || document.querySelector("#overlay")?.children.length)
       return false;
     open = true;
     panel.hidden = false;
     prompt.hidden = true;
+    onOpen();
     reset();
     audio.cue("softClick");
     return true;
@@ -116,8 +112,7 @@ export function createBlottoPractice(audio) {
     const b = e.target.closest("button");
     if (!b) return;
     if (b.hasAttribute("data-close")) {
-      open = false;
-      panel.hidden = true;
+      close();
       return;
     }
     if (b.dataset.card) {
@@ -142,18 +137,15 @@ export function createBlottoPractice(audio) {
   };
   return {
     open: show,
-    close() {
-      open = false;
-      panel.hidden = true;
-    },
+    close,
+    get active(){return open;},
     update(state, id) {
       near =
         state?.world === "lobby" &&
         !state.battlefield &&
         inBlottoRoom(state.players.find((p) => p.id === id));
       if (!near) {
-        open = false;
-        panel.hidden = true;
+        close();
       }
       prompt.hidden = !near || open;
     },

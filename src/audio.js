@@ -2,13 +2,16 @@ import { createCasinoAudio } from "./casino-audio.js";
 import { createBattlefieldAudio } from "./battlefield-audio.js";
 import { EMOTE_SECONDS } from "../shared/emotes.js";
 import { platforms, practicePlatforms, hazards, practiceHazards, stageOf, isParkour } from "../shared/world.js";
-import { audibleStructures, soundDistance } from "../shared/sound.js";
+import { audibleStructures, soundDistance, createProjectorEmoteSelector } from "../shared/sound.js";
 // Audio unlocks on the first user gesture; saved mute preference wins over defaults.
 export function createAudio({projector=false} = {}) {
-  let context, enabled = localStorage.getItem('bear-muted') !== 'true';
-  let remoteEnabled = localStorage.getItem("bear-remote-muted") !== "true";
+  let context, enabled = projector || localStorage.getItem('bear-muted') !== 'true';
+  let remoteEnabled = projector || localStorage.getItem("bear-remote-muted") !== "true";
   let activeKey = '', generation = 0, timer, voices = new Set(), desired;
   const buffers = new Map(), remoteChannels = new Map();
+  const projectorEmotes=createProjectorEmoteSelector();
+  let priorityUntil=0;
+  const ambienceMix=()=>projector && performance.now()<priorityUntil?.35:1;
   const motors = new Map(), hazardStates = new Map();
   let noiseBuffer, environmentWorld = "", lastEnvironment = 0, lastHazardAt = -1000, lastLobbyTankAt = null;
   function noise() {
@@ -50,7 +53,8 @@ export function createAudio({projector=false} = {}) {
     const ps=state.world==="lobby"?practicePlatforms(time):isParkour(state.world)?platforms(time,stage):[];
     const beforePlatforms=state.world==="lobby"?practicePlatforms(time-.04):isParkour(state.world)?platforms(time-.04,stage):[];
     const hs=state.world==="lobby"?practiceHazards(time):isParkour(state.world)?hazards(time,stage):[];
-    const nearby=audibleStructures(ps.filter(p=>p.moving||p.shrinking),player);
+    const machinery=ps.filter(p=>p.moving||p.shrinking);
+    const nearby=projector ? machinery.sort((a,b)=>soundDistance(b,player,80)-soundDistance(a,player,80)).slice(0,2) : audibleStructures(machinery,player);
     const selected=new Set(nearby.map(p=>p.id));
     for(const [id,node] of motors) if(!selected.has(id)) {node.gain.gain.setTargetAtTime(0,context.currentTime,.12);if(now-node.lastHeard>500){node.source.stop();node.source.disconnect();node.filter.disconnect();node.gain.disconnect();node.pan.disconnect();motors.delete(id);}}
     for(const p of nearby){
@@ -62,17 +66,17 @@ export function createAudio({projector=false} = {}) {
         ? Math.min(1,Math.abs((p.scale||1)-(before.scale||1))/.04*.4)
         : Math.min(1,Math.hypot(p.x-before.x,p.z-before.z)/.04/4);
       node.filter.frequency.setTargetAtTime(p.shrinking?200+motion*650:140+motion*180,context.currentTime,.08);
-      node.gain.gain.setTargetAtTime(soundDistance(p,player)*(p.shrinking?.018:.012)*motion,context.currentTime,.1);
+      node.gain.gain.setTargetAtTime((projector?Math.max(.28,soundDistance(p,player,55)):soundDistance(p,player))*(p.shrinking?.018:.012)*motion*ambienceMix(),context.currentTime,.1);
       node.pan.pan.setTargetAtTime(Math.max(-.8,Math.min(.8,((p.x-player.x)*-Math.cos(yaw)+(p.z-player.z)*Math.sin(yaw))/8)),context.currentTime,.1);
     }
-    for(const h of hs){const previous=hazardStates.get(h.id);hazardStates.set(h.id,h.state);const volume=soundDistance(h,player);
+    for(const h of hs){const previous=hazardStates.get(h.id);hazardStates.set(h.id,h.state);const volume=projector?Math.max(.24,soundDistance(h,player,55)):soundDistance(h,player);
       if (h.kind === "spikes" && previous && previous !== "warning" && h.state === "warning" && volume > .015) impact("mechanism", volume * .022);
       if(previous && previous!=="active" && h.state==="active" && volume>.015 && now-lastHazardAt>180){
         lastHazardAt=now;impact(h.kind==="spikes"?"spike":"punch",volume*(h.kind === "spikes" ? .035 : .065),Math.max(-.8,Math.min(.8,((h.x-player.x)*-Math.cos(yaw)+(h.z-player.z)*Math.sin(yaw))/8)));
       }
     }
   }
-  const casinoAudio=createCasinoAudio({context:()=>context,enabled:()=>enabled,noise});
+  const casinoAudio=createCasinoAudio({context:()=>context,enabled:()=>enabled,noise,mix:ambienceMix});
   const battleAudio=createBattlefieldAudio({context:()=>context,enabled:()=>enabled,noise,cue});
   function battlefield(state,player,yaw=0){battleAudio.update(state,player,yaw);}
   function stopRemote(id) {
@@ -87,10 +91,11 @@ export function createAudio({projector=false} = {}) {
   function remoteEmotes(state, listener, ownId, yaw = 0) {
     const wanted = new Set();
     if (enabled && remoteEnabled && context?.state === "running" && state && listener?.connected && !state.paused) {
-      for (const p of state.players) {
-        if (p.id === ownId || !p.connected || !p.emoteActive || !!p.waitingLobby !== !!listener.waitingLobby) continue;
+      const sources=projector ? projectorEmotes(state,performance.now()/1000,performance.now()<priorityUntil) : state.players;
+      for (const p of sources) {
+        if (p.id === ownId || !p.connected || !p.emoteActive || (!projector && !!p.waitingLobby !== !!listener.waitingLobby)) continue;
         const distance = Math.hypot(p.x-listener.x, p.z-listener.z, (p.y||0)-(listener.y||0));
-        if (distance >= 24) continue;
+        if (!projector && distance >= 24) continue;
         wanted.add(p.id);
         const key = `${p.emoteName}:${p.emoteAt}`;
         let channel = remoteChannels.get(p.id);
@@ -110,14 +115,14 @@ export function createAudio({projector=false} = {}) {
             if (offset >= duration) return;
             const source = context.createBufferSource(), envelope = context.createGain();
             source.buffer = buffer; source.connect(envelope); envelope.connect(gain);
-            const t = context.currentTime, remaining = duration-offset, fade = Math.min(.1,remaining/3);
+            const t = context.currentTime, remaining = Math.min(duration-offset,projector?2.8:Infinity), fade = Math.min(.1,remaining/3);
             envelope.gain.setValueAtTime(0,t);envelope.gain.linearRampToValueAtTime(1,t+fade);
             envelope.gain.setValueAtTime(1,t+remaining-fade);envelope.gain.linearRampToValueAtTime(0,t+remaining);
             current.sources.add(source);source.start(t,offset,remaining);
             source.onended = () => {current.sources.delete(source);source.disconnect();envelope.disconnect();};
           }).catch(() => {if (remoteChannels.get(p.id) === current) stopRemote(p.id); buffers.delete(p.emoteName);});
         }
-        channel.gain.gain.setTargetAtTime(.035 * Math.pow(1-distance/24, 2),context.currentTime,.1);
+        channel.gain.gain.setTargetAtTime((projector ? .007 * Math.max(.15,1-distance/60)**2 : .035 * Math.pow(1-distance/24, 2)),context.currentTime,.1);
         const dx=p.x-listener.x, dz=p.z-listener.z;
         channel.pan.positionX.setTargetAtTime(-dx*Math.cos(yaw)+dz*Math.sin(yaw),context.currentTime,.08);
         channel.pan.positionY.setTargetAtTime((p.y||0)-(listener.y||0),context.currentTime,.08);
@@ -128,10 +133,11 @@ export function createAudio({projector=false} = {}) {
   }
   async function unlock() {
     context ||= new AudioContext();
-    if (enabled && context.state !== "running") await context.resume();
+    if ((enabled || projector) && context.state !== "running") await context.resume();
   }
   function cue(kind) {
-    if(projector && ["jump","pad"].includes(kind)) return;
+    if(projector && ["jump","pad","hover","softClick","click","ready","vault"].includes(kind)) return;
+    if(projector && ["tick","go","warHorn","results"].includes(kind))priorityUntil=performance.now()+2500;
     if(kind === "warHorn") {casinoAudio.horn();return;}
     if(kind === "card") {casinoAudio.card();return;}
     if(kind === "lobbyTank") { impact("punch", .04); return; }
@@ -192,6 +198,11 @@ export function createAudio({projector=false} = {}) {
   }
   return {
     cue, unlock, emote, stop, environment, impact, remoteEmotes, battlefield, casino:casinoAudio.update,
+    setBroadcastEnabled(value){
+      if(!projector || enabled===value)return;
+      enabled=!!value;
+      if(!enabled){casinoAudio.stop();battleAudio.stop();stop();silenceEnvironment();for(const id of remoteChannels.keys())stopRemote(id);}
+    },
     get enabled(){return enabled;},
     get remoteEnabled(){return remoteEnabled;},
     toggleRemote(){remoteEnabled=!remoteEnabled;localStorage.setItem("bear-remote-muted",String(!remoteEnabled));if(!remoteEnabled)for(const id of remoteChannels.keys())stopRemote(id);return remoteEnabled;},

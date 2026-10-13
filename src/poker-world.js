@@ -439,6 +439,7 @@ export function buildPokerPractice(parent, label) {
   const welcome = label("Press E · Your own panda dealer", "#efd8a0", 7);
   welcome.position.set(-22, 3.4, 43);
   corridor.add(welcome);
+  welcome.userData.practiceSign=true;
   batchStatic(corridor);
   return lounge;
 }

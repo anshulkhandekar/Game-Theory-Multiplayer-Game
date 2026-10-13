@@ -2,3 +2,15 @@ node_modules/
 dist/
 data/
 .env
+
+# Local credentials and generated review/test output
+.env.*
+!.env.example
+artifacts/
+screenshots/
+coverage/
+*.log
+*.tmp
+.DS_Store
+/*.jpg
+/*.jpeg

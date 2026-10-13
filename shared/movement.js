@@ -34,6 +34,7 @@ export const MOVEMENT = {
   bodyHeight: 2.05,
 };
 export function canMove(state, player) {
+  if (player?.practiceSeat && state.world === "lobby" && !state.battlefield && !state.poker) return false;
   if (state.poker && state.world === "casino") return !state.poker.paused && state.poker.phase === "instructions";
   if (
     state.battlefield &&
@@ -102,6 +103,7 @@ export function move(
   staging = false,
   battlefield = null,
 ) {
+  if (world === "lobby" && p.practiceSeat) {p.vx=p.vy=p.vz=0; p.inputAck=p.inputSequence || 0; return;}
   if (world !== "lobby") delete p.lobbyTankAt;
   if (world === "casino") {
     const length=Math.max(1,Math.hypot(input.x||0,input.z||0));

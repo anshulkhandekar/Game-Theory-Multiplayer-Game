@@ -4,7 +4,7 @@ Five-round Crowd Rush MVP for Tuesday, October 13, 2026. Three.js procedural bea
 
 ## Run
 
-Requires Node 22.12+ and npm. From this directory:
+Requires Node 22.12–22.x and npm. From this directory:
 
 ```sh
 npm install
@@ -14,7 +14,7 @@ export STATE_FILE=data/state.json
 npm run dev
 ```
 
-Player: http://localhost:3000/ · Host: http://localhost:3000/?view=host · Public projector: http://localhost:3000/?view=projector
+Player: http://localhost:3000/ · Host: http://localhost:3000/?view=host · Projector: http://localhost:3000/?view=projector
 
 Enter HOST_KEY only in the host sign-in form. It is never bundled in the client or broadcast. If omitted, the server generates and prints a temporary key. `.env.example` describes configuration; `.env` is **not automatically loaded**. Do not reuse the development test key for an event.
 
@@ -23,11 +23,13 @@ For another person on the same LAN, share `http://YOUR-LAN-IP:3000/`; allow port
 Production build:
 
 ```sh
+export EVENT_CODE='choose-a-strong-attendee-code'
+export SPECTATOR_KEY='choose-a-separate-long-random-viewer-secret'
 npm run build
 npm start
 ```
 
-The start command serves `dist/` and uses the same environment variables. For internet hosting, put HTTPS/WSS in front of the server. This milestone is a single-process room, without account login, room codes, or horizontal scaling.
+The start command serves `dist/` and uses the same environment variables. For internet hosting, put HTTPS/WSS in front of the server. Production requires distinct EVENT_CODE (8+ characters), HOST_KEY and SPECTATOR_KEY (16+ characters each). Sign-in forms protect player, host and projector access. This remains a single-process room without individual accounts or horizontal scaling. See [HOSTING_GUIDE.md](HOSTING_GUIDE.md) for Railway setup, persistence and cost controls.
 
 ## Host sequence
 
@@ -43,6 +45,7 @@ Pause/Resume freezes both movement and phase deadlines. Results can end a round 
 
 ```sh
 npm test
+npm run test:integration
 npm run build
 # Use a separate fresh-state server for repeatable load tests:
 PORT=3001 HOST_KEY=load-test STATE_FILE=/tmp/bear-load-fresh.json npm start
@@ -219,3 +222,25 @@ Latest code is built and tested (132 tests and 40-player Poker rehearsal). Port 
 ## Live local server after final polish
 
 The finished build is running on port 3000 with the saved officer profiles/scores preserved. The local host key and launch settings are in the ignored `.env` file. Restart with `node --env-file=.env server/index.js`. Plain `npm start` does not load that file automatically. The user authorized a new host key and received it in chat. See the current HANDOFF.md for completed verification.
+
+
+## October 13 local polish test
+
+Latest behavior and validation are in HANDOFF.md. For convenient localhost testing, use this command (it does not read or change the private `.env`):
+
+```bash
+NODE_ENV=development PORT=3000 EVENT_CODE='' SPECTATOR_KEY='' HOST_KEY='local-workshop-host' STATE_FILE='data/local-test.json' npm run dev
+```
+
+Use `local-workshop-host` in the admin sign-in. Players and projector need no access code in this development mode. It uses separate local test scores. Stop with Ctrl+C before restarting. Production continues to require EVENT_CODE, SPECTATOR_KEY and HOST_KEY.
+
+The admin's **Player standings & history** panel is available in every game and keeps each newly completed scored play, including replays. Public lobby standings show only cumulative rank points. Historic totals from earlier builds are retained, but earlier per-round details were not recorded. Practice exits with Space, Escape or ×; Poker vocabulary is available in practice and during live hands. The host's Projector broadcast panel now includes fixed **Sky view** for Crowd Rush.
+
+
+## Projector pacing and chat moderation
+
+Automatic Crowd Rush uses angled circling only; Round 1 has no vault close-ups. Rounds 2–5 orbit closer, with brief held activity spotlights and eight seconds of overview between them. **Sky view** remains a manual admin option. Battlefield camera changes ease between held shots; Casino shot timing stays unchanged.
+
+Admin **Chat moderation** can disable/re-enable lobby messages and monitor the latest 100 Battlefield team messages, filtered by team or all teams. Only the admin gets the monitor stream. The lobby setting survives a server restart.
+
+Admin **Projector broadcast → Enable projector sound** controls projector audio independently of players' personal mute choices. Click the projector scene once to satisfy browser audio activation; round cues, traps, fighting and game ambience then play, with only occasional distant lobby emotes.

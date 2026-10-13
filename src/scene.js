@@ -1,4 +1,4 @@
-import {broadcastCamera} from "../shared/broadcast.js";
+import {createBroadcastDirector} from "../shared/broadcast.js";
 import { createLobbyWayfinding } from "./lobby-wayfinding.js";
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { polishLobby } from './lobby-polish.js';
@@ -679,6 +679,10 @@ export function createScene(canvas) {
     localId,
     local = null;
   let broadcast = {mode:"auto",target:null,zoom:1},broadcastPreview=false;
+  let practiceCamera=null;
+  const broadcastDirector=createBroadcastDirector();
+  let shotKey="", shotStarted=0;
+  const shotFrom=new THREE.Vector3(),lookFrom=new THREE.Vector3();
   const broadcastLook=new THREE.Vector3();
   const predictor = new Predictor(),
     snapshots = [];
@@ -739,7 +743,7 @@ export function createScene(canvas) {
       : !id && isParkour(currentWorld)
         ? 180
         : 85;
-    camera.far = state.battlefield ? 1000 : 100;
+    camera.far = state.battlefield ? 1000 : isParkour(state.world) ? 250 : 100;
     camera.updateProjectionMatrix();
     const p = state.players.find((p) => p.id === id);
     if (p) {
@@ -979,8 +983,9 @@ export function createScene(canvas) {
         b.lastRespawns = p.respawns || 0;
         const self = p.id === localId;
         b.name.visible = !snapshot.poker || snapshot.poker.phase === "instructions" || pokerOverview;
-        b.root.visible = !(self && (binoculars || (snapshot.poker && snapshot.poker.phase !== "instructions")));
-        b.shadow.visible = !(self && (binoculars || (snapshot.poker && snapshot.poker.phase !== "instructions")));
+        const practiceHidden = practiceCamera && (self || p.practiceSeat === practiceCamera);
+        b.root.visible = !practiceHidden && !(self && (binoculars || (snapshot.poker && snapshot.poker.phase !== "instructions")));
+        b.shadow.visible = b.root.visible;
         const ghost =
           !!localId &&
           !self &&
@@ -1027,7 +1032,7 @@ export function createScene(canvas) {
             angleDelta(b.rig.rotation.y, Math.atan2(target.vx, target.vz)) *
             (1 - Math.exp(-dt * 18));
 
-        if (snapshot.poker && snapshot.poker.phase !== "instructions") b.rig.rotation.y = p.facing;
+        if (p.practiceSeat || (snapshot.poker && snapshot.poker.phase !== "instructions")) b.rig.rotation.y = p.facing;
         b.gait += dt * speed * 2.8;
         const airborne = !(self ? local?.grounded : p.grounded);
         if (b.grounded && airborne)
@@ -1186,12 +1191,27 @@ export function createScene(canvas) {
         local && mine?.connected
           ? bears.get(localId)?.root.position || local
           : null;
-      const shot=(!localId || broadcastPreview) && broadcastCamera(snapshot,snapshot.worldTime+(snapshot.paused?0:(performance.now()-received)/1000),reducedMotion);
-      if(shot){
+      const shot=(!localId || broadcastPreview) && broadcastDirector(snapshot,snapshot.worldTime+(snapshot.paused?0:(performance.now()-received)/1000),reducedMotion);
+      if(practiceCamera && currentWorld === "lobby" && localId){
+        const blotto=practiceCamera==="blotto",x=blotto?22:-22;
+        camera.position.lerp(new THREE.Vector3(x,3.5,blotto?39.6:44.4),1-Math.exp(-dt*8));
+        camera.lookAt(x,blotto?1.3:.6,blotto?44:40);
+      } else if(shot){
         // Use the interpolated avatar, then smooth both camera and aim.
-        if(broadcast.mode==="player" && !broadcast.focus){const pos=bears.get(broadcast.target)?.root.position;if(pos){const delta=new THREE.Vector3(pos.x-shot.target.x,pos.y+1.4-shot.target.y,pos.z-shot.target.z);shot.position.x+=delta.x;shot.position.y+=delta.y;shot.position.z+=delta.z;shot.target={x:pos.x,y:pos.y+1.4,z:pos.z};}}
-        camera.position.lerp(new THREE.Vector3(shot.position.x,shot.position.y,shot.position.z),1-Math.exp(-dt*2.8));
-        broadcastLook.lerp(new THREE.Vector3(shot.target.x,shot.target.y,shot.target.z),1-Math.exp(-dt*2.8));camera.lookAt(broadcastLook);
+        if(broadcast.mode==="player" && !broadcast.focus){const pos=bears.get(broadcast.target)?.root.position;if(pos){const actor=snapshot.players.find(p=>p.id===broadcast.target);const delta=new THREE.Vector3(pos.x-(actor?.x||0),pos.y-(actor?.y||0),pos.z-(actor?.z||0));shot.position.x+=delta.x;shot.position.y+=delta.y;shot.position.z+=delta.z;shot.target.x+=delta.x;shot.target.y+=delta.y;shot.target.z+=delta.z;}}
+        const gentle=shot.key && !reducedMotion && broadcast.mode==="auto" && currentWorld!=="casino";
+        const nextKey=`${currentWorld}:${snapshot.round}:${shot.key}`;
+        if(gentle && nextKey!==shotKey){shotKey=nextKey;shotStarted=time;shotFrom.copy(camera.position);lookFrom.copy(broadcastLook);}
+        if(gentle && time-shotStarted<2.2){
+          const u=Math.max(0,Math.min(1,(time-shotStarted)/2.2)),ease=u*u*(3-2*u);
+          camera.position.lerpVectors(shotFrom,new THREE.Vector3(shot.position.x,shot.position.y,shot.position.z),ease);
+          broadcastLook.lerpVectors(lookFrom,new THREE.Vector3(shot.target.x,shot.target.y,shot.target.z),ease);
+        }else{
+          if(!gentle)shotKey="";
+          camera.position.lerp(new THREE.Vector3(shot.position.x,shot.position.y,shot.position.z),1-Math.exp(-dt*2.8));
+          broadcastLook.lerp(new THREE.Vector3(shot.target.x,shot.target.y,shot.target.z),1-Math.exp(-dt*2.8));
+        }
+        camera.lookAt(broadcastLook);
       } else if (currentWorld === "lobby" && !localId) {
         const angle =
           userReducedMotion ||
@@ -1417,6 +1437,9 @@ export function createScene(canvas) {
         snapshot?.players.find((p) => p.id === localId),
       );
     },
+    broadcastListener(){return {connected:true,projector:true,x:broadcastLook.x,y:Math.min(3,broadcastLook.y),z:broadcastLook.z,waitingLobby:false};},
+    broadcastYaw(){return Math.atan2(broadcastLook.x-camera.position.x,broadcastLook.z-camera.position.z);},
+    setPracticeCamera(kind){practiceCamera=kind;blottoWorld.traverse(o=>{if(o.userData.practiceSign || o.userData.tableLabel)o.visible=!kind;});},
     previewBroadcast(value){broadcastPreview=!!value;},
     pickBroadcastFocus(x,y){const rect=canvas.getBoundingClientRect();const ray=new THREE.Raycaster();ray.setFromCamera(new THREE.Vector2((x-rect.left)/rect.width*2-1,-(y-rect.top)/rect.height*2+1),camera);const hit=ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),0),new THREE.Vector3());if(!hit)return null;return {x:hit.x,z:hit.z,angle:Math.atan2(camera.position.x-hit.x,camera.position.z-hit.z),distance:Math.max(6,Math.min(500,camera.position.distanceTo(hit)*.55))};},
     setBroadcast(value) { broadcast={...broadcast,...value}; },

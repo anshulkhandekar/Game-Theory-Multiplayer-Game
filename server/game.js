@@ -8,6 +8,8 @@ import { normalizeAppearance } from "../shared/wardrobe.js";
 import { randomUUID } from "node:crypto";
 import { vaultsFor, insideVault, STAGES } from "../shared/world.js";
 import { appropriateText } from "./moderation.js";
+import { inBlottoRoom } from "../shared/blotto.js";
+import { inPokerRoom } from "../shared/poker.js";
 import { move } from "../shared/movement.js";
 export const VAULTS = [
   { id: "bronze", name: "Bronze", x: -9, z: -5, reward: 120, color: "#e79b56" },
@@ -35,10 +37,15 @@ export class Game {
     this.battlefieldSerial = 0;
     this.duration = duration;
     this.practiceDuration = practiceDuration;
+    this.registrationOpen = saved?.registrationOpen !== false;
+    this.lobbyChatEnabled = saved?.lobbyChatEnabled !== false;
+    this.reconnectReservations = new Map();
+    this.customizedAt = new Map();
+    this.roundHistory = saved?.roundHistory || [];
     this.players = new Map(
       saved?.players?.map((p) => [
         p.id,
-        { ...p, connected: false, input: {}, ready: false, emoteActive: false },
+        { ...p, connected: false, input: {}, ready: false, emoteActive: false, practiceSeat: null },
       ]) || [],
     );
     for (const p of this.players.values()) {
@@ -68,8 +75,14 @@ export class Game {
   }
   join(id, name, appearance = {}, connection = null) {
     let p = [...this.players.values()].find((p) => p.token === id);
+    for (const [id, until] of this.reconnectReservations)
+      if (until <= this.now()) this.reconnectReservations.delete(id);
+    const occupied = [...this.players.values()].filter(q => !q.demo && !q.kicked &&
+      (q.connected || this.reconnectReservations.has(q.id)));
+    if ((!p || !p.connected) && !this.reconnectReservations.has(p?.id) && occupied.length >= 40)
+      throw Error("The room already has 40 players, including reconnecting players. Ask the host for help.");
     if (!p) {
-      if([...this.players.values()].filter(p=>p.connected&&!p.demo&&!p.kicked).length>=40) throw Error("The room already has 40 players. Ask the host for help.");
+      if (!this.registrationOpen) throw Error("Registration is closed. Ask the host to admit you.");
       if([...this.players.values()].filter(p=>!p.demo).length>=300) throw Error("The room has reached its profile limit. Ask the host for help.");
       p = {
         id: randomUUID(),
@@ -160,6 +173,7 @@ export class Game {
       if (!p.waitingLobby && this.poker.phase !== 'instructions') this.poker.seat(this.poker.tableOf(p.id));
     }
     p.connected = true;
+    this.reconnectReservations.delete(p.id);
     if (this.battlefield?.phase === "matching" && !this.battlefield.demo && !p.officer) {
       if (
         !this.battlefield.roster.includes(p.id) &&
@@ -173,13 +187,33 @@ export class Game {
     p.input = {};
     return p;
   }
-  message(p, kind, text) {
+  disconnect(p, reserve = true) {
+    this.stopEmote(p);
+    p.connected = false;
+    p.practiceSeat = null;
+    p.input = {};
+    if (reserve && !p.kicked && !p.demo) this.reconnectReservations.set(p.id, this.now() + 30000);
+    else this.reconnectReservations.delete(p.id);
+  }
+  recordRound(kind, round, players) {
+    this.roundHistory.push({play:this.roundHistory.length + 1, kind, round, endedAt:this.now(), players});
+  }
+  practiceSeat(p, kind) {
+    if (kind === null) {p.practiceSeat = null; return;}
+    if (this.world !== "lobby" || this.phase !== "lobby" || this.battlefield || this.poker) throw Error("Practice is only available in the lobby");
+    const inside = kind === "blotto" ? inBlottoRoom(p) : kind === "poker" && inPokerRoom(p);
+    if (!inside) throw Error("Walk into the practice room first");
+    this.stopEmote(p);
+    Object.assign(p, {practiceSeat:kind, x:kind === "blotto" ? 22 : -22, z:kind === "blotto" ? 40.85 : 43.15, y:0, facing:kind === "blotto" ? 0 : Math.PI, vx:0, vy:0, vz:0, input:{}, grounded:true, respawns:(p.respawns || 0)+1});
+  }
+  message(p, kind, text, emote = false) {
     this.messages.push({
       seq: ++this.messageSerial,
       kind,
       name: p.name,
       text,
       time: this.now(),
+      ...(emote ? {emote:true} : {}),
     });
     if (this.messages.length > 80) this.messages.shift();
   }
@@ -190,6 +224,7 @@ export class Game {
         !["lobby", "ready", "instructions"].includes(this.phase))
     )
       throw Error("Chat is available in the lobby");
+    if (!this.lobbyChatEnabled) throw Error("Lobby chat is disabled by the host.");
     if (typeof text !== "string") throw Error("Invalid message");
     const clean = text
       .normalize("NFKC")
@@ -214,6 +249,7 @@ export class Game {
     p.emoteActive = true;
     p.emoteFacing = p.facing ?? Math.PI;
     p.emoteStoppedAt = undefined;
+    this.message(p, this.world === "lobby" || p.waitingLobby ? "chat" : "event", {wave:"waved", scuba:"scuba-ed", dance:"danced", griddy:"griddied"}[emote], true);
   }
   stopEmote(p) {
     if (!p.emoteActive) return;
@@ -236,7 +272,10 @@ export class Game {
   customize(p, appearance) {
     if (this.world !== "lobby" || this.phase !== "lobby" || !p.connected || p.kicked || p.demo)
       throw Error("Change your outfit while waiting in the main lobby.");
+    if (this.now() - (this.customizedAt.get(p.id) ?? -Infinity) < 2000)
+      throw Error("Wait two seconds before changing your outfit again.");
     p.appearance = this.appearance(appearance);
+    this.customizedAt.set(p.id, this.now());
     this.stopEmote(p);
     p.input = {};
     return p.appearance;
@@ -261,6 +300,7 @@ export class Game {
   sendToLobby(p) {
     this.stopEmote(p);
     Object.assign(p, {
+      practiceSeat: null,
       waitingLobby: this.world !== "lobby",
       eligible: false,
       ready: false,
@@ -280,6 +320,8 @@ export class Game {
     });
   }
   command(action, data = {}) {
+    if (action === "lobbyChat") {if(typeof data.enabled!=="boolean")throw Error("Choose whether lobby chat is enabled");this.lobbyChatEnabled=data.enabled;return;}
+    if (action === "registration") {this.registrationOpen = !data.locked; return;}
     if(action === "broadcast"){this.broadcast=updateBroadcast(this.broadcast,data,this);return;}
     if (action === 'officer') {
       if (this.phase !== 'lobby') throw Error('Assign officers in the lobby');
@@ -394,6 +436,7 @@ export class Game {
         if (p.sceneLoaded) p.loaded = true;
         else this.sendToLobby(p);
       }
+      for (const p of this.players.values()) this.stopEmote(p);
       this.phase = "countdown";
       this.deadline = this.now() + 8000;
       return;
@@ -405,6 +448,7 @@ export class Game {
       );
       if (players.some((p) => !p.loaded))
         throw Error("Wait for players to load and continue");
+      for (const p of this.players.values()) this.stopEmote(p);
       this.phase = "countdown";
       this.deadline = this.now() + 8000;
       return;
@@ -435,6 +479,7 @@ export class Game {
       for (const p of this.players.values()) {
         this.stopEmote(p);
         p.waitingLobby = false;
+        p.practiceSeat = null;
         delete p.pokerRemoved;
         p.eligible = false;
         p.ready = false;
@@ -531,6 +576,7 @@ export class Game {
     this.round++;
     this.practice = practice;
     this.results = [];
+    this.messages = this.messages.filter(m => m.kind === "chat");
     this.paused = false;
     const nextWorld = `arena${this.stage}`;
     this.phase = "loading";
@@ -560,6 +606,7 @@ export class Game {
       p.jumpHeld = false;
       this.stopEmote(p);
       p.waitingLobby = false;
+      p.practiceSeat = null;
       p.eligible = true;
       p.sceneLoaded = false;
       p.loaded = false;
@@ -600,13 +647,17 @@ export class Game {
           disconnected: !p.connected,
         };
       });
-    if (!this.practice) this.scoredRound++;
+    if (!this.practice) {
+      this.scoredRound++;
+      this.recordRound("crowd", this.stage, this.results.map(r => ({...r})));
+    }
     this.phase = "results";
     this.paused = false;
     this.deadline = 0;
   }
   tick(dt) {
     if (this.poker) {
+      for (const p of this.players.values()) if (p.emoteActive && this.now() >= p.emoteEndsAt) this.stopEmote(p);
       this.poker.tick(dt);
       if (!this.poker.paused) {this.worldTime += dt; this.lobbyTime += dt;}
       return;
@@ -761,6 +812,8 @@ export class Game {
   snapshot() {
     const points = tournamentScores([...this.players.values()]);
     return {
+      registrationOpen:this.registrationOpen,
+      lobbyChatEnabled:this.lobbyChatEnabled,
       broadcast:this.broadcast,
       poker: this.poker?.snapshot() || null,
       phase: this.phase,
@@ -806,6 +859,9 @@ export class Game {
   }
   save() {
     return {
+      roundHistory: this.roundHistory,
+      registrationOpen: this.registrationOpen,
+      lobbyChatEnabled: this.lobbyChatEnabled,
       scoredRound: this.scoredRound,
       players: [...this.players.values()]
         .filter((p) => !p.demo)
