@@ -176,7 +176,10 @@ export function createBattlefieldAudio({ context, enabled, noise, cue }) {
         dz = p.z - listener.z,
         distance = Math.hypot(dx, dz);
       return {
-        volume: Math.max(listener.projector ? 0.22 : 0.04, (1 - Math.min(1, distance / range)) ** 2),
+        volume: Math.max(
+          listener.projector ? 0.22 : 0.04,
+          (1 - Math.min(1, distance / range)) ** 2,
+        ),
         pan: Math.max(
           -0.8,
           Math.min(0.8, (-dx * Math.cos(yaw) + dz * Math.sin(yaw)) / range),
@@ -184,7 +187,7 @@ export function createBattlefieldAudio({ context, enabled, noise, cue }) {
       };
     };
     // No persistent loops: short bounded voices follow the shared aircraft positions.
-    const distantAllowed=!(listener.projector && b.phase==="reveal");
+    const distantAllowed = !(listener.projector && b.phase === "reveal");
     const routes = aircraftAt(time, positions),
       nearJet = routes
         .slice(0, 6)
@@ -237,7 +240,7 @@ export function createBattlefieldAudio({ context, enabled, noise, cue }) {
     if (b.phase === "reveal") {
       if (fight !== state.round) {
         fight = state.round;
-        if(listener.projector)stop();
+        if (listener.projector) stop();
         cue("warHorn");
       }
       const sources = positions.map((p) => ({

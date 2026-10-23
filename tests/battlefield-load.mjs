@@ -1,6 +1,4 @@
-const decoders = new WeakMap();
-const readMessage = (ws, raw) => { const m = JSON.parse(raw); if(m.type === "state") { if(!decoders.has(ws)) decoders.set(ws, snapshotDecoder()); m.state = decoders.get(ws)(m.state); } return m; };
-import {snapshotDecoder} from "../shared/snapshot-stream.js";
+import { readMessage } from "./socket-messages.js";
 import WebSocket from "ws";
 import assert from "node:assert/strict";
 const url = process.env.TEST_URL || "ws://localhost:3016",
@@ -10,7 +8,9 @@ let movement;
 const began = performance.now();
 function connect(name) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url, {headers:{"x-workshop-code":process.env.EVENT_CODE || ""}}),
+    const ws = new WebSocket(url, {
+        headers: { "x-workshop-code": process.env.EVENT_CODE || "" },
+      }),
       client = { ws, state: null, id: null, errors: [] };
     clients.push(client);
     ws.on("error", reject);

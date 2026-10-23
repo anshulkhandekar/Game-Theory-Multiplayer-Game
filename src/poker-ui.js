@@ -1,5 +1,5 @@
 import { pokerVocabulary } from "./poker-vocabulary.js";
-import {pokerAudience} from "./broadcast-audience.js";
+import { pokerAudience } from "./broadcast-audience.js";
 import { renderPokerTable, renderPokerResults } from "./poker-table-ui.js";
 import { pokerLesson, lessonTitles } from "./poker-lessons.js";
 import {
@@ -67,7 +67,7 @@ export function createPokerUI({ send, escape, view, toast, scene }) {
       authed && !preview
         ? `<section class="poker-host"><h3>Kuhn Poker controls</h3><p>Round ${b.round}/5 · ${b.tables.length} ${b.tables.length === 1 ? "table" : "tables"}</p><p>${done}/${ready.length} connected players ready</p>${b.phase === "instructions" ? '<button data-host="start">Seat players & start countdown</button><button data-host="forceStart">Start without waiting</button>' : b.phase === "results" && b.round < 5 ? '<button data-host="next">Load next round & tutorial</button>' : ""}<button data-host="${b.paused ? "resume" : "pause"}">${b.paused ? "Resume" : "Pause"}</button><button data-lobby>Return to lobby</button><button data-standings>Show leaderboard</button>${b.demo ? `<label>Play as<select data-pilot>${b.roster.map((i) => `<option value="${i}" ${i === id ? "selected" : ""}>${escape(state.players.find((p) => p.id === i)?.name || i)}</option>`).join("")}</select></label><button data-overview>${overview ? "Close camera" : "Casino overview"}</button><button data-preview>Preview player screen</button>` : ""}<details><summary>Tables & results</summary>${b.tables.map((t) => `<p>${names(t)} · ${t.status} · ${t.net.join(" / ")} chips</p>`).join("")}</details>${management}</section>`
         : view === "projector"
-          ? pokerAudience(state,escape)
+          ? pokerAudience(state, escape)
           : "";
     const participant = joined || (authed && b.demo);
     let content = "";
@@ -86,10 +86,23 @@ export function createPokerUI({ send, escape, view, toast, scene }) {
           opponent = state.players.find(
             (p) => p.id === mine.players[1 - ownIndex],
           );
-        content = renderPokerTable(mine,b,id,opponent,card,escape,meanings);
+        content = renderPokerTable(
+          mine,
+          b,
+          id,
+          opponent,
+          card,
+          escape,
+          meanings,
+        );
       } else {
         const index = mine.players.indexOf(id);
-        content = renderPokerResults(mine,b,id,p?.demo?undefined:p?.pokerScore||0);
+        content = renderPokerResults(
+          mine,
+          b,
+          id,
+          p?.demo ? undefined : p?.pokerScore || 0,
+        );
       }
     }
     root.innerHTML =
@@ -245,9 +258,9 @@ export function createPokerUI({ send, escape, view, toast, scene }) {
           ? "Explore & learn"
           : s.poker.phase === "countdown"
             ? "Get ready"
-          : s.poker.phase === "results"
-            ? "Round complete"
-            : "At the tables";
+            : s.poker.phase === "results"
+              ? "Round complete"
+              : "At the tables";
       document.querySelector("#timer").textContent = "";
       document.querySelector("#round-cue").textContent = "";
     },
@@ -255,7 +268,10 @@ export function createPokerUI({ send, escape, view, toast, scene }) {
       if (!state?.poker || root.hidden) return;
       const t = state.poker.tables.find((t) => t.players.includes(id));
       const countdown = root.querySelector("[data-countdown]");
-      if (countdown) countdown.textContent = state.poker.paused ? "Paused" : Math.ceil(Math.max(0,state.poker.countdown-elapsed));
+      if (countdown)
+        countdown.textContent = state.poker.paused
+          ? "Paused"
+          : Math.ceil(Math.max(0, state.poker.countdown - elapsed));
       const clock = root.querySelector("[data-clock]");
       if (clock && t)
         clock.textContent = state.poker.paused
@@ -263,7 +279,9 @@ export function createPokerUI({ send, escape, view, toast, scene }) {
           : t.status === "playing"
             ? Math.ceil(Math.max(0, t.remaining - elapsed)) +
               "s for this decision"
-            : t.result ? "" : "";
+            : t.result
+              ? ""
+              : "";
     },
     rules() {
       toast(
@@ -272,7 +290,10 @@ export function createPokerUI({ send, escape, view, toast, scene }) {
     },
   };
 }
-export function createPokerPractice(audio, {onOpen=()=>{}, onClose=()=>{}} = {}) {
+export function createPokerPractice(
+  audio,
+  { onOpen = () => {}, onClose = () => {} } = {},
+) {
   const root = document.createElement("section");
   root.id = "poker-practice";
   root.hidden = true;
@@ -321,7 +342,7 @@ export function createPokerPractice(audio, {onOpen=()=>{}, onClose=()=>{}} = {})
     if (turn === 1 && !result) choose(botAction(cards[1], actions.join(",")));
   }
   function render() {
-    root.innerHTML = `<button data-close class="blotto-close" aria-label="Close practice">×</button><h2>Kuhn Poker practice</h2>${pokerVocabulary()}<p>Try a hand against the panda dealer. You each receive one hidden card and pay a one-chip ante. King beats Queen, and Queen beats Jack.</p><div class="poker-hand">${card(cards[0], "Your card")}${card(result?.showdown ? cards[1] : null, "Panda dealer")}</div><p class="${result ? result.winner===0 ? "practice-win" : "practice-loss" : ""}">${result ? (result.winner === 0 ? "You win" : "Dealer wins") + ". You " + (result.winner === 0 ? "gain " : "lose ") + result.amount + " chip" + (result.amount === 2 ? "s" : "") + " overall." : legalActions(actions.join(",")).includes("call") ? "The dealer bet 1. Match it to compare cards, or give up your ante." : "Check to pass, or bet 1 to ask the dealer to call or fold."}</p><div class="poker-history">${actions.map((a,i)=>`${(first+i)%2===0 ? "You" : "Dealer"} ${{check:"checked",bet:"bet 1",call:"called",fold:"folded"}[a]}`).join(" · ") || `Both ante 1. ${first===0 ? "You act first." : "The dealer acts first."}`}</div><div class="poker-decisions ${!result ? "practice-choices" : ""}">${
+    root.innerHTML = `<button data-close class="blotto-close" aria-label="Close practice">×</button><h2>Kuhn Poker practice</h2>${pokerVocabulary()}<p>Try a hand against the panda dealer. You each receive one hidden card and pay a one-chip ante. King beats Queen, and Queen beats Jack.</p><div class="poker-hand">${card(cards[0], "Your card")}${card(result?.showdown ? cards[1] : null, "Panda dealer")}</div><p class="${result ? (result.winner === 0 ? "practice-win" : "practice-loss") : ""}">${result ? (result.winner === 0 ? "You win" : "Dealer wins") + ". You " + (result.winner === 0 ? "gain " : "lose ") + result.amount + " chip" + (result.amount === 2 ? "s" : "") + " overall." : legalActions(actions.join(",")).includes("call") ? "The dealer bet 1. Match it to compare cards, or give up your ante." : "Check to pass, or bet 1 to ask the dealer to call or fold."}</p><div class="poker-history">${actions.map((a, i) => `${(first + i) % 2 === 0 ? "You" : "Dealer"} ${{ check: "checked", bet: "bet 1", call: "called", fold: "folded" }[a]}`).join(" · ") || `Both ante 1. ${first === 0 ? "You act first." : "The dealer acts first."}`}</div><div class="poker-decisions ${!result ? "practice-choices" : ""}">${
       result
         ? "<button data-again>Deal next hand</button>"
         : legalActions(actions.join(","))
@@ -334,7 +355,9 @@ export function createPokerPractice(audio, {onOpen=()=>{}, onClose=()=>{}} = {})
   }
   function close() {
     if (!open) return;
-    open=false; root.hidden=true; onClose();
+    open = false;
+    root.hidden = true;
+    onClose();
   }
   function show() {
     if (open) return true;
@@ -366,7 +389,9 @@ export function createPokerPractice(audio, {onOpen=()=>{}, onClose=()=>{}} = {})
   return {
     open: show,
     close,
-    get active(){return open;},
+    get active() {
+      return open;
+    },
     update(state, id) {
       near =
         state.world === "lobby" &&

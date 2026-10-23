@@ -38,7 +38,8 @@ test("lobby chat validates text, limits rate, remains separate from round events
   now += 8000;
   g.tick(0.02);
   assert.throws(() => g.chat(p, "round chat"), /lobby/);
-  g.emote(p, "dance"); assert.equal(p.emoteActive,true);
+  g.emote(p, "dance");
+  assert.equal(p.emoteActive, true);
   g.message(p, "event", "fell");
   assert.ok(g.snapshot().messages.every((m) => m.kind === "event"));
   for (let i = 0; i < 100; i++) g.message(p, "event", "fell");
@@ -87,24 +88,45 @@ test("round event feed records authoritative falls and vault entry", () => {
   );
 });
 
-test('emotes finish once, can be selected again and stop before loading', () => {
+test("emotes finish once, can be selected again and stop before loading", () => {
   let now = 0;
   const g = new Game({ now: () => now });
-  const p = g.join(null, 'Dancer');
-  g.emote(p, 'griddy');
-  now = 7999; g.tick(.01); assert.equal(p.emoteActive,true);
-  now = 8000; g.tick(.01); assert.equal(p.emoteActive,false);
-  g.emote(p, 'griddy');assert.equal(p.emoteActive,true);
-  now = 16000;g.tick(.01);assert.equal(p.emoteActive,false);
-  g.emote(p, 'dance');g.command('practice');assert.equal(p.emoteActive,false);
+  const p = g.join(null, "Dancer");
+  g.emote(p, "griddy");
+  now = 7999;
+  g.tick(0.01);
+  assert.equal(p.emoteActive, true);
+  now = 8000;
+  g.tick(0.01);
+  assert.equal(p.emoteActive, false);
+  g.emote(p, "griddy");
+  assert.equal(p.emoteActive, true);
+  now = 16000;
+  g.tick(0.01);
+  assert.equal(p.emoteActive, false);
+  g.emote(p, "dance");
+  g.command("practice");
+  assert.equal(p.emoteActive, false);
 });
-test('live round emotes are allowed but loading, countdown, results and paused phases reject them',()=>{
-  let now=0;const g=new Game({now:()=>now}),p=g.join(null,'A');
-  g.command('ready');g.command('start');
-  assert.throws(()=>g.emote(p,'wave'),/Invalid/);
-  loadAndCountdown(g);assert.throws(()=>g.emote(p,'wave'),/Invalid/);
-  now=8000;g.tick(.05);g.emote(p,'wave');assert.equal(p.emoteActive,true);
-  now+=2400;g.tick(.05);assert.equal(p.emoteActive,false);
-  g.command('pause');assert.throws(()=>g.emote(p,'dance'),/Invalid/);
-  g.command('resume');g.command('results');assert.throws(()=>g.emote(p,'dance'),/Invalid/);
+test("live round emotes are allowed but loading, countdown, results and paused phases reject them", () => {
+  let now = 0;
+  const g = new Game({ now: () => now }),
+    p = g.join(null, "A");
+  g.command("ready");
+  g.command("start");
+  assert.throws(() => g.emote(p, "wave"), /Invalid/);
+  loadAndCountdown(g);
+  assert.throws(() => g.emote(p, "wave"), /Invalid/);
+  now = 8000;
+  g.tick(0.05);
+  g.emote(p, "wave");
+  assert.equal(p.emoteActive, true);
+  now += 2400;
+  g.tick(0.05);
+  assert.equal(p.emoteActive, false);
+  g.command("pause");
+  assert.throws(() => g.emote(p, "dance"), /Invalid/);
+  g.command("resume");
+  g.command("results");
+  assert.throws(() => g.emote(p, "dance"), /Invalid/);
 });

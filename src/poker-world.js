@@ -324,20 +324,44 @@ export function createPokerWorld(scene, label) {
   const visibleCards = new THREE.Group();
   shell.root.add(visibleCards);
   let cardKey = "";
-  const payouts=new THREE.Group();shell.root.add(payouts);
-  const payoutKeys=new Set(),payoutSprites=[];
-  function clearPayout(sprite){payouts.remove(sprite);sprite.material.map?.dispose();sprite.material.dispose();}
+  const payouts = new THREE.Group();
+  shell.root.add(payouts);
+  const payoutKeys = new Set(),
+    payoutSprites = [];
+  function clearPayout(sprite) {
+    payouts.remove(sprite);
+    sprite.material.map?.dispose();
+    sprite.material.dispose();
+  }
 
   return {
     root: shell.root,
     update(state, id) {
       shell.root.visible = state.world === "casino";
       phase = state.poker?.phase;
-      if (!shell.root.visible) {payoutKeys.clear();payoutSprites.splice(0).forEach(p=>clearPayout(p.sprite));return;}
-      if(!id) for(const t of state.poker.tables){
-        const key=`${state.round}:${state.poker.round}:${t.id}:${t.hand}`;
-        if(t.result && !payoutKeys.has(key)){payoutKeys.add(key);t.players.forEach((_,i)=>{const n=t.result.net[i],sprite=label(`${n>0?'+':''}${n} chip${Math.abs(n)===1?'':'s'}`,n>0?'#95ffae':'#ff9b93',2.6);sprite.position.set(t.x,3.2,t.z+(i?-2.15:2.15));payouts.add(sprite);payoutSprites.push({sprite,born:performance.now()/1000});});}
+      if (!shell.root.visible) {
+        payoutKeys.clear();
+        payoutSprites.splice(0).forEach((p) => clearPayout(p.sprite));
+        return;
       }
+      if (!id)
+        for (const t of state.poker.tables) {
+          const key = `${state.round}:${state.poker.round}:${t.id}:${t.hand}`;
+          if (t.result && !payoutKeys.has(key)) {
+            payoutKeys.add(key);
+            t.players.forEach((_, i) => {
+              const n = t.result.net[i],
+                sprite = label(
+                  `${n > 0 ? "+" : ""}${n} chip${Math.abs(n) === 1 ? "" : "s"}`,
+                  n > 0 ? "#95ffae" : "#ff9b93",
+                  2.6,
+                );
+              sprite.position.set(t.x, 3.2, t.z + (i ? -2.15 : 2.15));
+              payouts.add(sprite);
+              payoutSprites.push({ sprite, born: performance.now() / 1000 });
+            });
+          }
+        }
 
       const n = state.poker?.tables.length || 0;
       if (n !== count) {
@@ -390,7 +414,16 @@ export function createPokerWorld(scene, label) {
         if (o.userData.tableLabel)
           o.visible = overview || phase === "instructions";
       });
-      for(let i=payoutSprites.length-1;i>=0;i--){const p=payoutSprites[i],age=performance.now()/1000-p.born;p.sprite.material.opacity=Math.max(0,1-age/4);p.sprite.position.y=3.2+(reduced?0:age*.28);if(age>4){clearPayout(p.sprite);payoutSprites.splice(i,1);}}
+      for (let i = payoutSprites.length - 1; i >= 0; i--) {
+        const p = payoutSprites[i],
+          age = performance.now() / 1000 - p.born;
+        p.sprite.material.opacity = Math.max(0, 1 - age / 4);
+        p.sprite.position.y = 3.2 + (reduced ? 0 : age * 0.28);
+        if (age > 4) {
+          clearPayout(p.sprite);
+          payoutSprites.splice(i, 1);
+        }
+      }
       shell.frame(time, reduced, low);
     },
     tableCamera(state, id) {
@@ -439,7 +472,7 @@ export function buildPokerPractice(parent, label) {
   const welcome = label("Press E · Your own panda dealer", "#efd8a0", 7);
   welcome.position.set(-22, 3.4, 43);
   corridor.add(welcome);
-  welcome.userData.practiceSign=true;
+  welcome.userData.practiceSign = true;
   batchStatic(corridor);
   return lounge;
 }

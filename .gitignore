@@ -19,3 +19,14 @@ coverage/
 local-notes/
 .agents/
 skills-lock.json
+
+# Exported workshop state and credentials
+/workshop*.json
+/state*.json
+*.bak
+*.sqlite*
+*.db
+*.pem
+*.key
+service-account*.json
+credentials*.json

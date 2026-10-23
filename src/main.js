@@ -1,10 +1,10 @@
 import { createAdminChat } from "./admin-chat.js";
 import { createAdminStandings } from "./admin-standings.js";
-import {snapshotDecoder} from "../shared/snapshot-stream.js";
-import {reconnectDelay} from "../shared/reconnect.js";
+import { snapshotDecoder } from "../shared/snapshot-stream.js";
+import { reconnectDelay } from "../shared/reconnect.js";
 import { nearSkinLocker } from "./lobby-wayfinding.js";
 import { scrollBroadcastLists, createBroadcastUI } from "./broadcast-ui.js";
-import { createPokerUI, createPokerPractice } from './poker-ui.js';
+import { createPokerUI, createPokerPractice } from "./poker-ui.js";
 import { createBlottoPractice } from "./blotto-practice.js";
 import { teamPlan } from "../shared/battlefield.js";
 import { createBattlefieldUI } from "./battlefield-ui.js";
@@ -39,7 +39,7 @@ app.innerHTML = `<canvas id="scene" tabindex="0" aria-label="Game view"></canvas
 <details id="settings" class="settings-menu"><summary><span aria-hidden="true">☰</span> Menu</summary><div class="settings-panel"><button type="button" id="sound">Mute audio</button><button type="button" id="remote-sound">Mute other players’ emotes</button><button type="button" id="quality">Low graphics</button><button type="button" id="motion">Reduce motion</button><button type="button" id="workshop-info" hidden>Workshop info · 3 games</button><button type="button" id="help">Rules</button><details><summary>Controls</summary><p>WASD moves · Arrows look · Space jumps<br>E opens emotes · 1–4 selects one<br>Move or jump to stop an emote.</p></details></div></details><div id="transition" aria-live="polite"></div><div id="overlay"></div><div id="host"></div><div id="toast" role="status"></div>`;
 document.body.dataset.view = view;
 const gameScene = createScene(document.querySelector("#scene"));
-const audio = createAudio({projector:view === "projector"});
+const audio = createAudio({ projector: view === "projector" });
 let lastHoverAt = 0;
 document.addEventListener(
   "pointerdown",
@@ -89,13 +89,24 @@ const escape = (s) =>
         c
       ],
   );
-const practiceHooks = kind => ({
-  onOpen(){document.body.dataset.practice=kind;keys.clear();document.querySelector("#emote-menu").hidden=true;send({type:"practiceSeat",kind});gameScene.setPracticeCamera(kind);},
-  onClose(){delete document.body.dataset.practice;keys.clear();send({type:"practiceSeat",kind:null});gameScene.setPracticeCamera(null);}
+const practiceHooks = (kind) => ({
+  onOpen() {
+    document.body.dataset.practice = kind;
+    keys.clear();
+    document.querySelector("#emote-menu").hidden = true;
+    send({ type: "practiceSeat", kind });
+    gameScene.setPracticeCamera(kind);
+  },
+  onClose() {
+    delete document.body.dataset.practice;
+    keys.clear();
+    send({ type: "practiceSeat", kind: null });
+    gameScene.setPracticeCamera(null);
+  },
 });
-const blottoPractice = createBlottoPractice(audio,practiceHooks("blotto"));
-const pokerPractice = createPokerPractice(audio,practiceHooks("poker"));
-const pokerUI = createPokerUI({send,escape,view,toast,scene:gameScene});
+const blottoPractice = createBlottoPractice(audio, practiceHooks("blotto"));
+const pokerPractice = createPokerPractice(audio, practiceHooks("poker"));
+const pokerUI = createPokerUI({ send, escape, view, toast, scene: gameScene });
 const battlefieldUI = createBattlefieldUI({
   send,
   escape,
@@ -105,9 +116,15 @@ const battlefieldUI = createBattlefieldUI({
 });
 gameScene.onTerminal((front) => battlefieldUI.openTerminal(front));
 const controlling = () =>
-  joined || (view === "host" && authed && !!(state?.battlefield?.demo || state?.poker?.demo));
+  joined ||
+  (view === "host" &&
+    authed &&
+    !!(state?.battlefield?.demo || state?.poker?.demo));
 function instructions() {
-  if (state?.poker) {pokerUI.rules();return;}
+  if (state?.poker) {
+    pokerUI.rules();
+    return;
+  }
   if (state?.battlefield) {
     toast(
       "Your goal is to win territory across three fronts. Buy units at your barracks with E and compare armies with binoculars (1). The stronger army wins each front. Final changes are private, and purchases freeze at the countdown.",
@@ -153,10 +170,12 @@ function social() {
     ? "Lobby chat"
     : "Round events";
   document.querySelector("#chat-form").hidden = !lobby || view !== "player";
-  const chatDisabled=state.lobbyChatEnabled===false;
-  document.querySelector("#chat-text").disabled=chatDisabled;
-  document.querySelector("#chat-text").placeholder=chatDisabled?"Chat disabled by the host":"Say hello…";
-  document.querySelector("#chat-form button").disabled=chatDisabled;
+  const chatDisabled = state.lobbyChatEnabled === false;
+  document.querySelector("#chat-text").disabled = chatDisabled;
+  document.querySelector("#chat-text").placeholder = chatDisabled
+    ? "Chat disabled by the host"
+    : "Say hello…";
+  document.querySelector("#chat-form button").disabled = chatDisabled;
   document.querySelector("#emotes").hidden =
     view !== "player" ||
     !canEmote(
@@ -171,7 +190,12 @@ function social() {
   )
     document.querySelector("#emote-menu").hidden = true;
   const messages = state.messages || [],
-    key = state.world + ":" + state.lobbyChatEnabled + ":" + messages.map((m) => m.seq).join(",");
+    key =
+      state.world +
+      ":" +
+      state.lobbyChatEnabled +
+      ":" +
+      messages.map((m) => m.seq).join(",");
   if (key !== lastSocialKey) {
     const panel = document.querySelector("#messages");
     const bottom =
@@ -213,11 +237,11 @@ const workshopSplash =
   workshopSplashes[Math.floor(Math.random() * workshopSplashes.length)];
 let hasEntered = false;
 const entranceTheme = "purple";
-document.body.dataset.theme="purple";
-let lockerEditing=false;
+document.body.dataset.theme = "purple";
+let lockerEditing = false;
 function joinForm(editing = false) {
-  lockerEditing=editing;
-  document.body.dataset.locker=String(editing);
+  lockerEditing = editing;
+  document.body.dataset.locker = String(editing);
   lockerPreview?.dispose();
   clearInterval(sponsorTimer);
   document.body.dataset.entrance = "true";
@@ -249,13 +273,17 @@ function joinForm(editing = false) {
       "",
     )}</div><button type="button" id="random-outfit">🎲 Randomize outfit</button><button id="play">${saved ? "Rejoin lobby" : "Play"}</button><p id="entrance-room" role="status">Connecting to the room…</p><div class="entrance-sponsors"><span>Supported by</span><div class="sponsor-carousel" aria-label="Workshop sponsors"><div class="sponsor-deck">${["Southwest", "LPL Financial", "xAI", "Verizon"].map((name, i) => `<div class="sponsor-slide" data-sponsor="${i}" role="img" aria-label="${name}"><div class="sponsor-art" style="--sponsor-index:${i}"></div></div>`).join("")}</div></div></div><a class="datathon-invite" href="https://tamudatathon.com/#event-information" target="_blank" rel="noopener noreferrer" aria-label="Register for TAMU Datathon"><img src="/assets/tamu-datathon-mark.png" alt="TAMU Datathon"><span>Join TAMU Datathon</span><small>Explore the event & register</small></a><a class="discord-invite" href="https://discord.com/invite/wJF2T7Gb8" target="_blank" rel="noopener noreferrer"><svg aria-hidden="true" viewBox="0 0 24 24"><path fill="currentColor" d="M19.7 5.3a18 18 0 0 0-4.4-1.4l-.6 1.2a16 16 0 0 0-5.4 0l-.6-1.2a18 18 0 0 0-4.4 1.4C1.5 9.5.8 13.6 1.2 17.6a18 18 0 0 0 5.4 2.7l1.1-1.8-1.7-.8.4-.3a13 13 0 0 0 11.2 0l.4.3-1.7.8 1.1 1.8a18 18 0 0 0 5.4-2.7c.5-4.6-.8-8.7-3.1-12.3ZM8.5 14.7c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Zm7 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Z"/></svg><span>Join our Discord</span></a></form>`;
   if (editing) {
-    document.querySelector(".entrance-title h2").textContent="Skin locker";
+    document.querySelector(".entrance-title h2").textContent = "Skin locker";
     document.querySelector(".workshop-splash").remove();
     document.querySelector(".club-banner-frame").remove();
     document.querySelector("#play").textContent = "Save outfit & return";
     document.querySelector(".entrance-account").hidden = true;
     document.querySelector("#username").required = false;
-    const cancel=document.createElement("button");cancel.type="button";cancel.textContent="Keep current outfit";cancel.onclick=closeLocker;document.querySelector("#play").after(cancel);
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = "Keep current outfit";
+    cancel.onclick = closeLocker;
+    document.querySelector("#play").after(cancel);
   }
   lockerPreview = gameScene.locker(
     document.querySelector("#locker"),
@@ -350,26 +378,61 @@ function joinForm(editing = false) {
   document.querySelector("#join").onsubmit = (e) => {
     e.preventDefault();
     if (ws?.readyState !== 1) return toast("Wait for the room connection.");
-    if (editing) {send({type:"customize",appearance});return;}
+    if (editing) {
+      send({ type: "customize", appearance });
+      return;
+    }
     const profile = { name: new FormData(e.target).get("name"), appearance };
     localStorage.setItem("bear-profile", JSON.stringify(profile));
     send({ type: "join", id: token, pageId, resume: false, ...profile });
   };
 }
 function closeLocker() {
-  lockerEditing=false;document.body.dataset.locker="false";
-  clearInterval(sponsorTimer);lockerPreview?.dispose();lockerPreview=null;overlay.innerHTML="";document.body.dataset.entrance="false";keys.clear();
+  lockerEditing = false;
+  document.body.dataset.locker = "false";
+  clearInterval(sponsorTimer);
+  lockerPreview?.dispose();
+  lockerPreview = null;
+  overlay.innerHTML = "";
+  document.body.dataset.entrance = "false";
+  keys.clear();
 }
-const skinPrompt=document.createElement("button");skinPrompt.id="skin-locker-prompt";skinPrompt.textContent="Enter · Change your outfit";skinPrompt.hidden=true;app.append(skinPrompt);
-const openLocker=()=>{if(joined && state?.phase==="lobby" && nearSkinLocker(state.players.find(p=>p.id===id)) && !overlay.innerHTML){keys.clear();joinForm(true);}};
-skinPrompt.onclick=openLocker;
-const broadcastUI=createBroadcastUI(view,gameScene,audio,send);
-const adminStandings=createAdminStandings(view,send,escape);
-const adminChat=createAdminChat(view,send,escape);
+const skinPrompt = document.createElement("button");
+skinPrompt.id = "skin-locker-prompt";
+skinPrompt.textContent = "Enter · Change your outfit";
+skinPrompt.hidden = true;
+app.append(skinPrompt);
+const openLocker = () => {
+  if (
+    joined &&
+    state?.phase === "lobby" &&
+    nearSkinLocker(state.players.find((p) => p.id === id)) &&
+    !overlay.innerHTML
+  ) {
+    keys.clear();
+    joinForm(true);
+  }
+};
+skinPrompt.onclick = openLocker;
+const broadcastUI = createBroadcastUI(view, gameScene, audio, send);
+const adminStandings = createAdminStandings(view, send, escape);
+const adminChat = createAdminChat(view, send, escape);
 let inputSequence = 0,
   lastInputSent = performance.now();
 function send(m) {
-  if (["input","sceneLoaded","loadReady","ready","chat","emote","practiceSeat"].includes(m.type) && !controlling()) return;
+  if (
+    [
+      "input",
+      "sceneLoaded",
+      "loadReady",
+      "ready",
+      "chat",
+      "emote",
+      "practiceSeat",
+    ].includes(m.type) &&
+    !controlling()
+  )
+    return;
   if (m.type === "input" && (m.x || m.z || m.jump)) audio.emote(null);
   if (ws?.readyState === 1) {
     if (m.type === "input") {
@@ -382,7 +445,9 @@ function send(m) {
     ws.send(JSON.stringify(m));
   }
 }
-let retryAttempt = 0, retryTimer, connectedAt = 0;
+let retryAttempt = 0,
+  retryTimer,
+  connectedAt = 0;
 function connect() {
   clearTimeout(retryTimer);
   const decodeSnapshot = snapshotDecoder();
@@ -399,17 +464,21 @@ function connect() {
       if (hasEntered && token && profile)
         send({ type: "join", id: token, pageId, resume: true, ...profile });
       else {
-        if (!document.querySelector('#join')) joinForm();
-        send({type:'preview'});
+        if (!document.querySelector("#join")) joinForm();
+        send({ type: "preview" });
       }
-    } else if (view === 'projector') send({type:'observe'});
+    } else if (view === "projector") send({ type: "observe" });
   };
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.type === "history") adminStandings.history(m.rounds);
     if (m.type === "teamChats") adminChat.messages(m.messages);
     if (m.type === "customized") {
-      const profile=JSON.parse(localStorage.getItem("bear-profile")||"{}");profile.appearance=m.appearance;localStorage.setItem("bear-profile",JSON.stringify(profile));closeLocker();toast("Outfit saved");
+      const profile = JSON.parse(localStorage.getItem("bear-profile") || "{}");
+      profile.appearance = m.appearance;
+      localStorage.setItem("bear-profile", JSON.stringify(profile));
+      closeLocker();
+      toast("Outfit saved");
     }
     if (m.type === "identity") {
       id = m.id;
@@ -428,13 +497,13 @@ function connect() {
     if (m.type === "state") {
       const old = state;
       state = decodeSnapshot(m.state);
-      if(lockerEditing && state.phase!=="lobby") closeLocker();
+      if (lockerEditing && state.phase !== "lobby") closeLocker();
       const demoPilot =
         view === "host" && authed && state.poker?.demo
           ? state.poker.demo.pilot
           : view === "host" && authed && state.battlefield?.demo
-          ? state.battlefield.demo.pilot
-          : null;
+            ? state.battlefield.demo.pilot
+            : null;
       if (view === "host" && id !== demoPilot) {
         id = demoPilot;
         gameScene.clearPrediction();
@@ -488,11 +557,16 @@ function connect() {
         audio.cue("jump");
       phaseFeedback(old);
       renderUI();
-      if (view === 'host') {
-        let warning = document.querySelector('#storage-warning');
-        if (!warning) {warning = document.createElement('p'); warning.id = 'storage-warning'; warning.setAttribute('role','alert'); app.append(warning);}
+      if (view === "host") {
+        let warning = document.querySelector("#storage-warning");
+        if (!warning) {
+          warning = document.createElement("p");
+          warning.id = "storage-warning";
+          warning.setAttribute("role", "alert");
+          app.append(warning);
+        }
         warning.hidden = !state.serverHealth?.persistenceError;
-        warning.textContent = state.serverHealth?.persistenceError || '';
+        warning.textContent = state.serverHealth?.persistenceError || "";
       }
       if (state.battlefield && old?.world !== state.world)
         audio.cue("softClick");
@@ -528,16 +602,18 @@ function connect() {
     }
   };
   ws.onclose = (e) => {
-    blottoPractice.close();pokerPractice.close();
+    blottoPractice.close();
+    pokerPractice.close();
     audio.emote(null);
     gameScene.clearPrediction();
     joined = false;
     authed = false;
     keys.clear();
     hostUI();
-    document.querySelector("#connection").textContent = view === 'host'
-      ? "Connection lost. Reconnecting; host sign-in may be required."
-      : "Connection lost. Reconnecting—please wait before refreshing.";
+    document.querySelector("#connection").textContent =
+      view === "host"
+        ? "Connection lost. Reconnecting; host sign-in may be required."
+        : "Connection lost. Reconnecting—please wait before refreshing.";
     if (e.code === 4001 || e.code === 4002) {
       hasEntered = false;
       document.querySelector("#connection").textContent =
@@ -563,7 +639,7 @@ function setHTML(selector, html) {
   const previous = renderedHTML.get(node);
   if (previous?.html !== html || previous?.first !== node.firstChild) {
     node.innerHTML = html;
-    renderedHTML.set(node, {html, first:node.firstChild});
+    renderedHTML.set(node, { html, first: node.firstChild });
   }
 }
 function toast(t) {
@@ -576,24 +652,57 @@ function hostUI() {
     ? `<div class="hostpanel"><h3>Control desk</h3><label><input type="checkbox" id="registration-lock"> Close new-player registration</label><label>Game<select id="game-select"><option value="crowd">Crowd Rush</option><option value="battlefield">Battlefield</option><option value="poker">Kuhn Poker</option></select></label><button id="load-game">Load selected game</button><p id="game-entry-help">Crowd Rush uses the arena controls below.</p><div id="crowd-controls"><div class="actions">${["instructions", "practice", "ready", "start", "countdown", "forceCountdown", "pause", "resume", "leaderboard", "results", "next", "lobby", "battlefield"].map((a) => `<button data-action="${a}">${{ instructions: "Show rules", practice: "Load practice", ready: "Gather ready checks", start: "Load scored round", countdown: "Start countdown", forceCountdown: "Start without waiting", pause: "Pause", resume: "Resume", leaderboard: "Show leaderboard", results: "End round & show results", next: "Next round", lobby: "Return to lobby", battlefield: "Start Battlefield matching" }[a]}</button>`).join("")}</div><label>Arena<select id="stage">${STAGES.map((s) => `<option value="${s.id}">Round ${s.id}: ${s.name}</option>`).join("")}</select></label><label>Scored duration (seconds)<input id="duration" type="number" min="5" max="180" value="${state?.duration || 35}"></label><label>Rewards: bronze, gold, diamond, sky (rounds 3–5)<input id="rewards" value="${[...["bronze", "gold", "diamond", "sky"].map((key) => state?.rewardPools?.[key] ?? { bronze: 120, gold: 240, diamond: 360, sky: 480 }[key])].join(",")}"></label><button id="configure">Apply settings</button><p class="host-help">Start without waiting admits ready scenes; others wait in the lobby.</p></div><div id="roster"></div></div>`
     : `<form class="hostpanel" id="auth"><h3>Host sign in</h3><label>Server host key<input type="password" id="key" required></label><button>Authenticate</button></form>`;
   if (authed) {
-    document.querySelector("#registration-lock").onchange = e => send({type:"host", action:"registration", data:{locked:e.target.checked}});
+    document.querySelector("#registration-lock").onchange = (e) =>
+      send({
+        type: "host",
+        action: "registration",
+        data: { locked: e.target.checked },
+      });
     document
       .querySelector("#host .hostpanel")
       .insertAdjacentHTML(
         "beforeend",
         `<details class="demo-setup"><summary>Battlefield solo demo</summary><p>Simulated pandas, opponents and disposable scores. Participants include your controllable demo bear.</p><label>Participants<input id="demo-count" type="number" min="2" max="40" value="16"></label><label>Preferred team size<select id="demo-size"><option value="3">Automatic · prefer 3</option><option value="2">Prefer 2</option></select></label><p id="demo-plan"></p><button id="start-demo">Start solo demo</button></details>`,
       );
-    document.querySelector('#host .hostpanel').insertAdjacentHTML('beforeend', `<details><summary>Kuhn Poker solo demo</summary><p>Two to forty simulated participants; odd counts add a bot seat. Demo scores are disposable.</p><label>Participants<input id="poker-demo-count" type="number" min="2" max="40" value="2"></label><button id="poker-demo-start">Start Poker demo</button></details><details><summary>Prize exclusions</summary><p>Excluded accounts sit out scored games. Odd Poker attendance always uses a rotating bot seat.</p><div id="officers" class="officer-controls"></div></details>`);
-    document.querySelector('#poker-demo-start').onclick=()=>send({type:'host',action:'pokerDemo',data:{count:Number(document.querySelector('#poker-demo-count').value)}});
-    document.querySelector('#officers').onchange=e=>send({type:'host',action:'officer',data:{id:e.target.dataset.officer,officer:e.target.checked}});
-    document.querySelector('#game-select').onchange=e=>{
-      const game=e.target.value; document.querySelector('#game-entry-help').textContent=game==='battlefield'?'Load starts 30-second team matching. Rounds unlock after teams form.':game==='poker'?'Load opens the casino tutorial. Ready players roam until you start.':'Crowd Rush uses the arena controls below.';
-      document.querySelector('#crowd-controls').hidden=game!=='crowd';
+    document
+      .querySelector("#host .hostpanel")
+      .insertAdjacentHTML(
+        "beforeend",
+        `<details><summary>Kuhn Poker solo demo</summary><p>Two to forty simulated participants; odd counts add a bot seat. Demo scores are disposable.</p><label>Participants<input id="poker-demo-count" type="number" min="2" max="40" value="2"></label><button id="poker-demo-start">Start Poker demo</button></details><details><summary>Prize exclusions</summary><p>Excluded accounts sit out scored games. Odd Poker attendance always uses a rotating bot seat.</p><div id="officers" class="officer-controls"></div></details>`,
+      );
+    document.querySelector("#poker-demo-start").onclick = () =>
+      send({
+        type: "host",
+        action: "pokerDemo",
+        data: {
+          count: Number(document.querySelector("#poker-demo-count").value),
+        },
+      });
+    document.querySelector("#officers").onchange = (e) =>
+      send({
+        type: "host",
+        action: "officer",
+        data: { id: e.target.dataset.officer, officer: e.target.checked },
+      });
+    document.querySelector("#game-select").onchange = (e) => {
+      const game = e.target.value;
+      document.querySelector("#game-entry-help").textContent =
+        game === "battlefield"
+          ? "Load starts 30-second team matching. Rounds unlock after teams form."
+          : game === "poker"
+            ? "Load opens the casino tutorial. Ready players roam until you start."
+            : "Crowd Rush uses the arena controls below.";
+      document.querySelector("#crowd-controls").hidden = game !== "crowd";
     };
-    document.querySelector('#load-game').onclick=()=>{
-      const game=document.querySelector('#game-select').value;
-      if(game==='crowd'){toast('Choose an arena, gather ready checks, then load the scored round.');return;}
-      send({type:'host',action:game});
+    document.querySelector("#load-game").onclick = () => {
+      const game = document.querySelector("#game-select").value;
+      if (game === "crowd") {
+        toast(
+          "Choose an arena, gather ready checks, then load the scored round.",
+        );
+        return;
+      }
+      send({ type: "host", action: game });
     };
     const previewDemo = () => {
       try {
@@ -729,22 +838,31 @@ function loadingUI() {
   }
 }
 function renderUI() {
-  adminStandings.update(state,authed);
-  adminChat.update(state,authed);
+  adminStandings.update(state, authed);
+  adminChat.update(state, authed);
   social();
-  const emoteButton=document.querySelector("#emotes"), otherGame=!!(state.poker || state.battlefield);
-  const emoteParent=otherGame ? app : document.querySelector(".footer-actions");
-  if (emoteButton.parentElement!==emoteParent) emoteParent.append(emoteButton);
-  emoteButton.classList.toggle("floating-emotes",otherGame);
+  const emoteButton = document.querySelector("#emotes"),
+    otherGame = !!(state.poker || state.battlefield);
+  const emoteParent = otherGame
+    ? app
+    : document.querySelector(".footer-actions");
+  if (emoteButton.parentElement !== emoteParent)
+    emoteParent.append(emoteButton);
+  emoteButton.classList.toggle("floating-emotes", otherGame);
   emoteButton.disabled = false;
   blottoPractice.update(state, id);
-  pokerPractice.update(state,id);
-  pokerUI.update(state,id,authed,joined);
-  if(state.poker && state.world === "casino") standingsUI();
+  pokerPractice.update(state, id);
+  pokerUI.update(state, id, authed, joined);
+  if (state.poker && state.world === "casino") standingsUI();
   if (state.poker && state.world === "casino") {
-    document.body.dataset.world=state.world;document.body.dataset.phase=state.phase;
-    document.querySelector("#transition").innerHTML="";overlay.innerHTML="";tour.hidden=true;readyGuide.hidden=true;
-    battlefieldUI.update({...state,battlefield:null},id,authed,joined);return;
+    document.body.dataset.world = state.world;
+    document.body.dataset.phase = state.phase;
+    document.querySelector("#transition").innerHTML = "";
+    overlay.innerHTML = "";
+    tour.hidden = true;
+    readyGuide.hidden = true;
+    battlefieldUI.update({ ...state, battlefield: null }, id, authed, joined);
+    return;
   }
   if (state.battlefield && view === "player" && !joined) {
     battlefieldUI.update(state, id, authed, joined);
@@ -765,7 +883,9 @@ function renderUI() {
   }
   battlefieldUI.update(state, id, authed, joined);
   document.querySelector("#board .board-note").textContent =
-    state.world === "lobby" ? "Rank points · 100 per game" : "Crowd Rush earnings";
+    state.world === "lobby"
+      ? "Rank points · 100 per game"
+      : "Crowd Rush earnings";
   document.querySelector("#board").style.display = "";
   social();
   document.body.dataset.world = state.world;
@@ -806,25 +926,31 @@ function renderUI() {
   ].includes(state.phase)
     ? Math.ceil(state.remaining) + "s"
     : "";
-  setHTML("#vaults", state.vaults
-    .map((v) => {
-      const n = state.occupancy[v.id];
-      return `<div class="vaultcard ${lastZone === v.id ? "selected" : ""}" style="--vault:${v.color}"><div class="vault-name"><i class="vault-symbol ${v.id}" aria-hidden="true"></i><span>${v.name}</span>${lastZone === v.id ? '<b class="your-vault">You’re here</b>' : ""}</div><div class="vault-pool"><strong>${v.reward}</strong><span>reward pool</span></div><div class="vault-detail"><span>${n} ${n === 1 ? "bear" : "bears"}</span><b>${n ? (v.reward / n).toFixed(1) : v.reward}<em> each</em></b></div></div>`;
-    })
-    .join(""));
-  setHTML("#leaderboard", [...state.players]
-    .filter((p) => !p.kicked && !p.officer && !p.demo)
-    .sort((a, b) =>
-      state.world === "lobby"
-        ? (b.tournament?.total || 0) - (a.tournament?.total || 0)
-        : b.earnings - a.earnings,
-    )
-    .slice(0, 40)
-    .map(
-      (p, i) =>
-        `<div class="score ${p.id === id ? "me" : ""}"><span class="rank">${i + 1}</span><span class="player-name">${escape(p.name)}${p.id === id ? " <em>you</em>" : ""}${p.connected ? "" : " <em>away</em>"}</span><b>${(state.world==='lobby'?(p.tournament?.total||0):p.earnings).toFixed(1)}</b></div>`,
-    )
-    .join(""));
+  setHTML(
+    "#vaults",
+    state.vaults
+      .map((v) => {
+        const n = state.occupancy[v.id];
+        return `<div class="vaultcard ${lastZone === v.id ? "selected" : ""}" style="--vault:${v.color}"><div class="vault-name"><i class="vault-symbol ${v.id}" aria-hidden="true"></i><span>${v.name}</span>${lastZone === v.id ? '<b class="your-vault">You’re here</b>' : ""}</div><div class="vault-pool"><strong>${v.reward}</strong><span>reward pool</span></div><div class="vault-detail"><span>${n} ${n === 1 ? "bear" : "bears"}</span><b>${n ? (v.reward / n).toFixed(1) : v.reward}<em> each</em></b></div></div>`;
+      })
+      .join(""),
+  );
+  setHTML(
+    "#leaderboard",
+    [...state.players]
+      .filter((p) => !p.kicked && !p.officer && !p.demo)
+      .sort((a, b) =>
+        state.world === "lobby"
+          ? (b.tournament?.total || 0) - (a.tournament?.total || 0)
+          : b.earnings - a.earnings,
+      )
+      .slice(0, 40)
+      .map(
+        (p, i) =>
+          `<div class="score ${p.id === id ? "me" : ""}"><span class="rank">${i + 1}</span><span class="player-name">${escape(p.name)}${p.id === id ? " <em>you</em>" : ""}${p.connected ? "" : " <em>away</em>"}</span><b>${(state.world === "lobby" ? p.tournament?.total || 0 : p.earnings).toFixed(1)}</b></div>`,
+      )
+      .join(""),
+  );
   document.querySelector("#ready").style.display =
     view === "player" && state.phase === "ready" ? "" : "none";
   if (authed) {
@@ -876,7 +1002,9 @@ function renderUI() {
   if (state.phase === "ready")
     document.querySelector("#headline").textContent = me?.ready
       ? "Confirmed ready"
-      : view === "projector" ? "Players are getting ready" : "Confirm you’re ready";
+      : view === "projector"
+        ? "Players are getting ready"
+        : "Confirm you’re ready";
   document
     .querySelector("#headline")
     .classList.toggle(
@@ -911,7 +1039,14 @@ function renderUI() {
 }
 document.querySelector("#help").onclick = instructions;
 document.querySelector("#workshop-info").onclick = () => {
-  if (!joined || !tourDone || lockerEditing || state?.world!=="lobby" || document.body.dataset.entrance==="true") return;
+  if (
+    !joined ||
+    !tourDone ||
+    lockerEditing ||
+    state?.world !== "lobby" ||
+    document.body.dataset.entrance === "true"
+  )
+    return;
   keys.clear();
   document.querySelector("#settings").open = false;
   overlay.innerHTML = `<section class="modal workshop-info" role="dialog" aria-label="Workshop information"><div class="sheet-heading"><span>Aggie Data Science Club</span><h2>Three games. One workshop.</h2></div><div class="sheet-body"><p>You’ll play three games: Crowd Rush, Battlefield and Poker Showdown. The players with the highest total score after all three games win.</p><ol><li><b>Game 1 · Crowd Rush</b><p>Choose where to compete for rewards. Try the parkour hall straight ahead for movement practice.</p></li><li><b>Game 2 · Battlefield</b><p>Coordinate your resources across three fronts. Follow the hovering arrow through the left doorway for Colonel Blotto practice against your own bot.</p></li><li><b>Game 3 · Poker Showdown</b><p>Play one-card Kuhn Poker against a panda dealer. Take the right doorway when facing the parkour hall to find the small casino lounge.</p></li></ol><p>Lobby practice is optional and doesn’t change your workshop points. You can always check Total Points in the lobby standings.</p><button id="close-workshop-info">Back to the lobby</button></div></section>`;
@@ -923,7 +1058,8 @@ document.querySelector("#ready").onclick = () => {
   send({ type: "ready", ready: true });
 };
 function input() {
-  if (blottoPractice.active || pokerPractice.active) return {x:0,z:0,jump:false};
+  if (blottoPractice.active || pokerPractice.active)
+    return { x: 0, z: 0, jump: false };
   if (document.querySelector("#load-continue"))
     return { x: 0, z: 0, jump: false };
   if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName))
@@ -938,19 +1074,49 @@ addEventListener("keydown", (e) => {
   const typing =
     ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName) ||
     document.activeElement.isContentEditable;
-  if (!typing && (blottoPractice.active || pokerPractice.active) && ["Space","Escape"].includes(e.code)) {e.preventDefault();blottoPractice.close();pokerPractice.close();return;}
-  if (!typing && e.code === "Enter" && !e.repeat && !overlay.innerHTML && state?.phase === "lobby" && nearSkinLocker(state.players.find(p=>p.id===id))) {e.preventDefault();openLocker();return;}
+  if (
+    !typing &&
+    (blottoPractice.active || pokerPractice.active) &&
+    ["Space", "Escape"].includes(e.code)
+  ) {
+    e.preventDefault();
+    blottoPractice.close();
+    pokerPractice.close();
+    return;
+  }
+  if (
+    !typing &&
+    e.code === "Enter" &&
+    !e.repeat &&
+    !overlay.innerHTML &&
+    state?.phase === "lobby" &&
+    nearSkinLocker(state.players.find((p) => p.id === id))
+  ) {
+    e.preventDefault();
+    openLocker();
+    return;
+  }
   if (!typing && state?.world === "lobby" && !state.battlefield) {
-    if (e.code === "KeyE" && !e.repeat && (blottoPractice.open() || pokerPractice.open())) {
+    if (
+      e.code === "KeyE" &&
+      !e.repeat &&
+      (blottoPractice.open() || pokerPractice.open())
+    ) {
       e.preventDefault();
       return;
     }
-    if (e.code === "Escape") {blottoPractice.close();pokerPractice.close();}
+    if (e.code === "Escape") {
+      blottoPractice.close();
+      pokerPractice.close();
+    }
   }
   if (!typing && state?.battlefield && controlling()) {
     if ((e.code === "Digit1" || e.code === "Numpad1") && !e.repeat) {
       e.preventDefault();
-      if (!document.querySelector("#emote-menu").hidden) {document.querySelectorAll("[data-emote]")[0].click();return;}
+      if (!document.querySelector("#emote-menu").hidden) {
+        document.querySelectorAll("[data-emote]")[0].click();
+        return;
+      }
       battlefieldUI.toggleBinoculars();
       return;
     }
@@ -1077,16 +1243,33 @@ document.querySelector("#remote-sound").onclick = () => {
   remoteSoundText();
 };
 setInterval(() => {
-  if (controlling() && (view === "player" || state?.battlefield?.demo || state?.poker?.demo))
+  if (
+    controlling() &&
+    (view === "player" || state?.battlefield?.demo || state?.poker?.demo)
+  )
     send({ type: "input", ...input() });
 }, 50);
 function updateHostActions() {
   const registration = document.querySelector("#registration-lock");
   if (registration) registration.checked = state.registrationOpen === false;
-  const officers=document.querySelector('#officers');
-  if(officers){const html=state.players.filter(p=>!p.demo).map(p=>`<label><input type="checkbox" data-officer="${p.id}" ${p.officer?'checked':''} ${state.phase!=='lobby'?'disabled':''}>${escape(p.name)}${p.connected?'':' (away)'}</label>`).join('');if(officers.dataset.renderKey!==html){officers.dataset.renderKey=html;officers.innerHTML=html;}}
-  const load=document.querySelector('#load-game');if(load)load.disabled=!['lobby','results'].includes(state.phase);
-  const demo=document.querySelector('#poker-demo-start');if(demo)demo.disabled=!['lobby','results'].includes(state.phase);
+  const officers = document.querySelector("#officers");
+  if (officers) {
+    const html = state.players
+      .filter((p) => !p.demo)
+      .map(
+        (p) =>
+          `<label><input type="checkbox" data-officer="${p.id}" ${p.officer ? "checked" : ""} ${state.phase !== "lobby" ? "disabled" : ""}>${escape(p.name)}${p.connected ? "" : " (away)"}</label>`,
+      )
+      .join("");
+    if (officers.dataset.renderKey !== html) {
+      officers.dataset.renderKey = html;
+      officers.innerHTML = html;
+    }
+  }
+  const load = document.querySelector("#load-game");
+  if (load) load.disabled = !["lobby", "results"].includes(state.phase);
+  const demo = document.querySelector("#poker-demo-start");
+  if (demo) demo.disabled = !["lobby", "results"].includes(state.phase);
   const phase = state.phase;
   const available = {
     instructions: phase === "lobby",
@@ -1235,23 +1418,48 @@ function frame(t) {
     !overlay.innerHTML &&
     !["INPUT", "SELECT"].includes(document.activeElement.tagName)
   )
-    if (!blottoPractice.active && !pokerPractice.active) gameScene.look(dt, keys);
-  skinPrompt.hidden = !(joined && state?.phase==="lobby" && nearSkinLocker(state.players.find(p=>p.id===id)) && !overlay.innerHTML);
-  document.querySelector("#workshop-info").hidden = !joined || !tourDone || lockerEditing || state?.world!=="lobby" || document.body.dataset.entrance==="true";
-  broadcastUI.update(state,authed);
-  if(view==="projector") scrollBroadcastLists(document.querySelector("#app"),t);
+    if (!blottoPractice.active && !pokerPractice.active)
+      gameScene.look(dt, keys);
+  skinPrompt.hidden = !(
+    joined &&
+    state?.phase === "lobby" &&
+    nearSkinLocker(state.players.find((p) => p.id === id)) &&
+    !overlay.innerHTML
+  );
+  document.querySelector("#workshop-info").hidden =
+    !joined ||
+    !tourDone ||
+    lockerEditing ||
+    state?.world !== "lobby" ||
+    document.body.dataset.entrance === "true";
+  broadcastUI.update(state, authed);
+  if (view === "projector")
+    scrollBroadcastLists(document.querySelector("#app"), t);
   blottoPractice.frame();
-  pokerUI.clock((performance.now()-receivedAt)/1000);
+  pokerUI.clock((performance.now() - receivedAt) / 1000);
   battlefieldUI.clock((performance.now() - receivedAt) / 1000);
-  const projector=view==="projector", audioPlayer=state?.players.find(p=>p.id===id);
-  if(projector)audio.setBroadcastEnabled(state?.broadcast?.soundEnabled!==false);
-  const listener=projector?gameScene.broadcastListener():audioPlayer;
-  const listenerYaw=projector?gameScene.broadcastYaw():gameScene.listenerYaw();
-  const ambientState=projector || (joined && !document.querySelector("#load-continue")) ? state : null;
-  audio.remoteEmotes(ambientState,listener,id,listenerYaw);
-  audio.battlefield(projector || controlling() || (view==="host" && authed) ? {...state,audioReceivedAt:receivedAt} : null,listener||{x:0,z:0},listenerYaw);
-  audio.environment(ambientState,listener,listenerYaw);
-  audio.casino(state,listener,projector);
+  const projector = view === "projector",
+    audioPlayer = state?.players.find((p) => p.id === id);
+  if (projector)
+    audio.setBroadcastEnabled(state?.broadcast?.soundEnabled !== false);
+  const listener = projector ? gameScene.broadcastListener() : audioPlayer;
+  const listenerYaw = projector
+    ? gameScene.broadcastYaw()
+    : gameScene.listenerYaw();
+  const ambientState =
+    projector || (joined && !document.querySelector("#load-continue"))
+      ? state
+      : null;
+  audio.remoteEmotes(ambientState, listener, id, listenerYaw);
+  audio.battlefield(
+    projector || controlling() || (view === "host" && authed)
+      ? { ...state, audioReceivedAt: receivedAt }
+      : null,
+    listener || { x: 0, z: 0 },
+    listenerYaw,
+  );
+  audio.environment(ambientState, listener, listenerYaw);
+  audio.casino(state, listener, projector);
   gameScene.frame(
     dt,
     t / 1000,
@@ -1392,13 +1600,10 @@ function standingsUI() {
   clearTimeout(standingsTimeout);
   standings.innerHTML = `<section class="modal results" role="dialog" aria-label="Workshop leaderboard"><div class="sheet-heading"><span>Workshop standings · closes in 5 seconds</span><h2>Leaderboard</h2></div><div class="sheet-body"><div class="resultrows">${state.players
     .filter((p) => !p.kicked && !p.officer && !p.demo)
-    .sort(
-      (a, b) =>
-        (b.tournament?.total||0)-(a.tournament?.total||0),
-    )
+    .sort((a, b) => (b.tournament?.total || 0) - (a.tournament?.total || 0))
     .map(
       (p, i) =>
-        `<div class="${p.id === id ? "own-result" : ""}"><b>${i + 1}. ${escape(p.name)}</b><strong>${(p.tournament?.total||0).toFixed(1)}</strong></div>`,
+        `<div class="${p.id === id ? "own-result" : ""}"><b>${i + 1}. ${escape(p.name)}</b><strong>${(p.tournament?.total || 0).toFixed(1)}</strong></div>`,
     )
     .join(
       "",

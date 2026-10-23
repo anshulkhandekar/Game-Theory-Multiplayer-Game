@@ -1,6 +1,4 @@
-const decoders = new WeakMap();
-const readMessage = (ws, raw) => { const m = JSON.parse(raw); if(m.type === "state") { if(!decoders.has(ws)) decoders.set(ws, snapshotDecoder()); m.state = decoders.get(ws)(m.state); } return m; };
-import {snapshotDecoder} from "../shared/snapshot-stream.js";
+import { readMessage } from "./socket-messages.js";
 // Disposable room only. Never point this script at the workshop officer room.
 import WebSocket from "ws";
 import assert from "node:assert/strict";
@@ -13,7 +11,9 @@ let hostState;
 let count = 40;
 function connect(host = false, index = 0) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url, {headers:{"x-workshop-code":process.env.EVENT_CODE || ""}});
+    const ws = new WebSocket(url, {
+      headers: { "x-workshop-code": process.env.EVENT_CODE || "" },
+    });
     ws.on("open", () =>
       ws.send(
         JSON.stringify(

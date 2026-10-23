@@ -1,4 +1,4 @@
-import { randomAppearance } from '../shared/wardrobe.js';
+import { randomAppearance } from "../shared/wardrobe.js";
 import { randomInt } from "node:crypto";
 import {
   POKER,
@@ -43,7 +43,7 @@ export class Poker {
     this.game.players.set(id, {
       id,
       name: pilot ? "YourDemoPanda" : "PandaBot" + (index + 1),
-      appearance: {...randomAppearance(),bear:"panda"},
+      appearance: { ...randomAppearance(), bear: "panda" },
       connected: true,
       demo: true,
       pokerBot: !pilot,
@@ -292,7 +292,26 @@ export class Poker {
             p.eventsPlayed = { ...p.eventsPlayed, poker: true };
           }
         });
-      if (!this.demo) this.game.recordRound("poker", this.round, this.tables.flatMap(t=>t.players.map((id,i)=>({id,opponent:this.game.players.get(t.players[1-i])?.name || "Opponent",net:t.net[i],won:t.net[i]>0,hands:t.log.map(h=>({hand:h.hand,net:h.net[i]}))}))).filter(r=>{const p=this.game.players.get(r.id);return p && !p.demo && !p.officer && !p.waitingLobby && !p.kicked;}));
+      if (!this.demo)
+        this.game.recordRound(
+          "poker",
+          this.round,
+          this.tables
+            .flatMap((t) =>
+              t.players.map((id, i) => ({
+                id,
+                opponent:
+                  this.game.players.get(t.players[1 - i])?.name || "Opponent",
+                net: t.net[i],
+                won: t.net[i] > 0,
+                hands: t.log.map((h) => ({ hand: h.hand, net: h.net[i] })),
+              })),
+            )
+            .filter((r) => {
+              const p = this.game.players.get(r.id);
+              return p && !p.demo && !p.officer && !p.waitingLobby && !p.kicked;
+            }),
+        );
       this.phase = "results";
       this.serial++;
       this.game.pokerSerial++;
@@ -305,7 +324,12 @@ export class Poker {
       paused: this.paused,
       serial: this.serial,
       hands: POKER.hands,
-      countdown: Math.max(0, ((this.countdownEnd || 0) - (this.paused ? this.pauseAt : this.game.now())) / 1000),
+      countdown: Math.max(
+        0,
+        ((this.countdownEnd || 0) -
+          (this.paused ? this.pauseAt : this.game.now())) /
+          1000,
+      ),
       roster: this.roster,
       ready: [...this.ready],
       demo: this.demo || null,

@@ -1,7 +1,7 @@
-import {StateStore} from "./storage.js";
-import {createAccess} from "./access.js";
-import {SnapshotStream} from "../shared/snapshot-stream.js";
-import {allowUpgrade} from "./admission.js";
+import { StateStore } from "./storage.js";
+import { createAccess } from "./access.js";
+import { SnapshotStream } from "../shared/snapshot-stream.js";
+import { allowUpgrade } from "./admission.js";
 import express from "express";
 import { createServer } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
@@ -16,8 +16,12 @@ if (!process.env.HOST_KEY) console.log("Temporary host key:", hostKey);
 const file = process.env.STATE_FILE || "data/state.json";
 const store = new StateStore(file);
 const game = new Game({ saved: store.saved });
-const access = createAccess({eventCode:process.env.EVENT_CODE, hostKey:process.env.HOST_KEY,
-  spectatorKey:process.env.SPECTATOR_KEY, production:process.env.NODE_ENV === "production"});
+const access = createAccess({
+  eventCode: process.env.EVENT_CODE,
+  hostKey: process.env.HOST_KEY,
+  spectatorKey: process.env.SPECTATOR_KEY,
+  production: process.env.NODE_ENV === "production",
+});
 const stream = new SnapshotStream();
 const entranceState = new Game().snapshot();
 const app = express();
@@ -25,9 +29,12 @@ const server = createServer(app);
 const wss = new WebSocketServer({
   server,
   maxPayload: 4096,
-  verifyClient: info => {
+  verifyClient: (info) => {
     const role = access.role(info.req);
-    return !!role && allowUpgrade(info.req, wss.clients.size, role === 'host' ? 100 : 96);
+    return (
+      !!role &&
+      allowUpgrade(info.req, wss.clients.size, role === "host" ? 100 : 96)
+    );
   },
   // Frames are repetitive JSON. Bound compression work and avoid per-client retained contexts.
   perMessageDeflate: {
@@ -38,12 +45,24 @@ const wss = new WebSocketServer({
     zlibDeflateOptions: { level: 1 },
   },
 });
-app.get('/health', (_req,res) => res.status(store.error ? 503 : 200).json({ok:!store.error}));
-app.post('/access', express.urlencoded({extended:false, limit:'1kb'}), access.login);
+app.get("/health", (_req, res) =>
+  res.status(store.error ? 503 : 200).json({ ok: !store.error }),
+);
+app.post(
+  "/access",
+  express.urlencoded({ extended: false, limit: "1kb" }),
+  access.login,
+);
 app.use(access.gate);
-if (process.env.NODE_ENV === "production") app.use(express.static(process.env.CLIENT_DIST || "dist", {
-  setHeaders(res, file) { if (/[/\\]assets[/\\].*-[-\w]{8}\.(js|css)$/.test(file)) res.setHeader('Cache-Control','public, max-age=31536000, immutable'); }
-}));
+if (process.env.NODE_ENV === "production")
+  app.use(
+    express.static(process.env.CLIENT_DIST || "dist", {
+      setHeaders(res, file) {
+        if (/[/\\]assets[/\\].*-[-\w]{8}\.(js|css)$/.test(file))
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      },
+    }),
+  );
 else {
   const { createServer } = await import("vite");
   const vite = await createServer({
@@ -53,7 +72,7 @@ else {
   app.use(vite.middlewares);
 }
 const flush = () => store.flush(game.save());
-if (!flush()) throw Error('Score storage is not writable; refusing to start.');
+if (!flush()) throw Error("Score storage is not writable; refusing to start.");
 let saveTimer;
 const persist = () => {
   saveTimer ||= setTimeout(() => {
@@ -103,8 +122,14 @@ function writeMetrics() {
 }
 if (delay) setInterval(writeMetrics, 5000).unref();
 
-let usageAt=Date.now(),usageBytes=0;
-setInterval(()=>{const at=Date.now();metrics.rawMbps=(metrics.bytes-usageBytes)*8/(at-usageAt)/1000;usageBytes=metrics.bytes;usageAt=at;},5000).unref();
+let usageAt = Date.now(),
+  usageBytes = 0;
+setInterval(() => {
+  const at = Date.now();
+  metrics.rawMbps = ((metrics.bytes - usageBytes) * 8) / (at - usageAt) / 1000;
+  usageBytes = metrics.bytes;
+  usageAt = at;
+}, 5000).unref();
 const equal = (a, b) => {
   const x = Buffer.from(String(a || "")),
     y = Buffer.from(b);
@@ -112,13 +137,15 @@ const equal = (a, b) => {
 };
 wss.on("connection", (ws, req) => {
   ws.accessRole = access.role(req);
-  ws.host = ws.accessRole === 'host' && new URL(req.url, 'http://local').searchParams.get('view') === 'host';
+  ws.host =
+    ws.accessRole === "host" &&
+    new URL(req.url, "http://local").searchParams.get("view") === "host";
   ws.joinBy = Date.now() + 20000;
   ws.snapshotVersion = -1;
   ws.alive = true;
   ws.on("pong", () => (ws.alive = true));
-  if (ws.host) send(ws, {type:'auth', ok:true});
-  else send(ws, {type:'welcome'});
+  if (ws.host) send(ws, { type: "auth", ok: true });
+  else send(ws, { type: "welcome" });
   const traffic = new TrafficBudget();
   ws.on("error", () => {});
   ws.on("message", (raw) => {
@@ -138,14 +165,23 @@ wss.on("connection", (ws, req) => {
         return;
       }
       if (!m || typeof m !== "object") throw Error("Invalid request");
-      if (m.type === 'preview') {
-        if (!ws.preview) { ws.preview = true; ws.joinBy = Date.now() + 10 * 60 * 1000; }
-        if (!ws.player && !ws.host && !ws.spectator) send(ws, {type:'state', state:entranceState});
+      if (m.type === "preview") {
+        if (!ws.preview) {
+          ws.preview = true;
+          ws.joinBy = Date.now() + 10 * 60 * 1000;
+        }
+        if (!ws.player && !ws.host && !ws.spectator)
+          send(ws, { type: "state", state: entranceState });
         return;
       }
-      if (m.type === 'observe') {
-        if (!['host','spectator','local'].includes(ws.accessRole)) throw Error('Use the projector key to observe.');
-        if (!ws.spectator && [...wss.clients].filter(c => c.spectator).length >= 4) throw Error('The projector limit has been reached.');
+      if (m.type === "observe") {
+        if (!["host", "spectator", "local"].includes(ws.accessRole))
+          throw Error("Use the projector key to observe.");
+        if (
+          !ws.spectator &&
+          [...wss.clients].filter((c) => c.spectator).length >= 4
+        )
+          throw Error("The projector limit has been reached.");
         ws.spectator = true;
         return;
       }
@@ -154,7 +190,9 @@ wss.on("connection", (ws, req) => {
         // A refreshed host page starts its input counter again. Its disposable
         // demo pilot must accept that new stream rather than ignore movement.
         if (ws.host) {
-          const pilot = game.players.get(game.poker?.demo?.pilot || game.battlefield?.demo?.pilot);
+          const pilot = game.players.get(
+            game.poker?.demo?.pilot || game.battlefield?.demo?.pilot,
+          );
           if (pilot) {
             pilot.inputSequence = pilot.inputAck = 0;
             pilot.input = {};
@@ -175,12 +213,13 @@ wss.on("connection", (ws, req) => {
                 "Removed by host",
               );
             }
-        if(m.action!=="broadcast") persist();
+        if (m.action !== "broadcast") persist();
         return;
       }
       if (m.type === "join") {
         if (ws.player) return;
-        if (ws.accessRole === 'spectator') throw Error('Projector access cannot join as a player.');
+        if (ws.accessRole === "spectator")
+          throw Error("Projector access cannot join as a player.");
         if (typeof m.name !== "string" || !/^[A-Za-z0-9]{1,24}$/.test(m.name))
           throw Error("Use 1–24 letters and numbers for your username.");
         const p = game.join(
@@ -213,8 +252,8 @@ wss.on("connection", (ws, req) => {
         ws.host && game.poker?.demo
           ? game.poker.demo.pilot
           : ws.host && game.battlefield?.demo
-          ? game.battlefield.demo.pilot
-          : ws.player,
+            ? game.battlefield.demo.pilot
+            : ws.player,
       );
       if (!p) {
         if (ws.host && m.type === "input") return;
@@ -227,7 +266,7 @@ wss.on("connection", (ws, req) => {
       }
       if (m.type === "poker") {
         if (!game.poker) throw Error("Poker is unavailable");
-        game.poker.act(p.id,m.action,m.data);
+        game.poker.act(p.id, m.action, m.data);
       }
       if (m.type === "battle") {
         if (!game.battlefield) throw Error("Battlefield is unavailable");
@@ -282,7 +321,11 @@ setInterval(() => {
     if (now - (p.lastInput || 0) > 1000) p.input = {};
   game.tick(Math.min((now - previous) / 1000, 0.1));
   previous = now;
-  if (game.phase !== lastPhase || game.battlefieldSerial !== lastBattleSerial || game.pokerSerial !== lastPokerSerial) {
+  if (
+    game.phase !== lastPhase ||
+    game.battlefieldSerial !== lastBattleSerial ||
+    game.pokerSerial !== lastPokerSerial
+  ) {
     lastPokerSerial = game.pokerSerial;
     lastBattleSerial = game.battlefieldSerial;
     if (saveTimer) {
@@ -297,7 +340,7 @@ setInterval(() => {
   for (const ws of wss.clients) {
     if (ws.readyState !== WebSocket.OPEN) continue;
     if (!ws.host && !ws.player && !ws.spectator) {
-      if (now >= ws.joinBy) ws.close(4003, 'Join or authenticate to continue');
+      if (now >= ws.joinBy) ws.close(4003, "Join or authenticate to continue");
       continue;
     }
     if (ws.bufferedAmount > MAX_QUEUED_BYTES) {
@@ -312,21 +355,30 @@ setInterval(() => {
       ws.host && game.poker?.demo
         ? game.poker.demo.pilot
         : ws.host && game.battlefield?.demo
-        ? game.battlefield.demo.pilot
-        : ws.player;
-    const recipientState=actor?game.snapshotFor(actor,base):base;
+          ? game.battlefield.demo.pilot
+          : ws.player;
+    const recipientState = actor ? game.snapshotFor(actor, base) : base;
     const wireState = stream.encode(recipientState, ws.snapshotVersion);
-    if (ws.host) wireState.serverHealth = {connections:wss.clients.size, rawMbps:metrics.rawMbps||0,
-      meanTickMs:metrics.tickMs/Math.max(1,metrics.ticks), persistenceError:store.error};
+    if (ws.host)
+      wireState.serverHealth = {
+        connections: wss.clients.size,
+        rawMbps: metrics.rawMbps || 0,
+        meanTickMs: metrics.tickMs / Math.max(1, metrics.ticks),
+        persistenceError: store.error,
+      };
     if (ws.host && ws.historyVersion !== game.roundHistory.length) {
-      send(ws, {type:"history", rounds:game.roundHistory});
+      send(ws, { type: "history", rounds: game.roundHistory });
       ws.historyVersion = game.roundHistory.length;
     }
     if (ws.host) {
-      const messages=game.battlefield?.messages || [], chatVersion=`${game.round}:${game.battlefield?.teams.map(t=>t.id).join(',')||''}:${messages.length}:${messages.at(-1)?.id||0}`;
-      if(chatVersion!==ws.chatVersion){send(ws,{type:"teamChats",messages});ws.chatVersion=chatVersion;}
+      const messages = game.battlefield?.messages || [],
+        chatVersion = `${game.round}:${game.battlefield?.teams.map((t) => t.id).join(",") || ""}:${messages.length}:${messages.at(-1)?.id || 0}`;
+      if (chatVersion !== ws.chatVersion) {
+        send(ws, { type: "teamChats", messages });
+        ws.chatVersion = chatVersion;
+      }
     }
-    const data = JSON.stringify({type:'state', state:wireState});
+    const data = JSON.stringify({ type: "state", state: wireState });
     ws.snapshotVersion = stream.version;
     ws.send(data);
     metrics.bytes += Buffer.byteLength(data);

@@ -1,4 +1,4 @@
-import { casinoSolids } from './poker.js';
+import { casinoSolids } from "./poker.js";
 import { LOBBY_TANK } from "./lobby-showcase.js";
 import {
   battlefieldSolids,
@@ -34,8 +34,15 @@ export const MOVEMENT = {
   bodyHeight: 2.05,
 };
 export function canMove(state, player) {
-  if (player?.practiceSeat && state.world === "lobby" && !state.battlefield && !state.poker) return false;
-  if (state.poker && state.world === "casino") return !state.poker.paused && state.poker.phase === "instructions";
+  if (
+    player?.practiceSeat &&
+    state.world === "lobby" &&
+    !state.battlefield &&
+    !state.poker
+  )
+    return false;
+  if (state.poker && state.world === "casino")
+    return !state.poker.paused && state.poker.phase === "instructions";
   if (
     state.battlefield &&
     (state.world.startsWith("battlefield") ||
@@ -103,18 +110,40 @@ export function move(
   staging = false,
   battlefield = null,
 ) {
-  if (world === "lobby" && p.practiceSeat) {p.vx=p.vy=p.vz=0; p.inputAck=p.inputSequence || 0; return;}
+  if (world === "lobby" && p.practiceSeat) {
+    p.vx = p.vy = p.vz = 0;
+    p.inputAck = p.inputSequence || 0;
+    return;
+  }
   if (world !== "lobby") delete p.lobbyTankAt;
   if (world === "casino") {
-    const length=Math.max(1,Math.hypot(input.x||0,input.z||0));
-    p.vx = approach(p.vx || 0,((input.x || 0)/length)*MOVEMENT.speed,MOVEMENT.acceleration*dt);
-    p.vz = approach(p.vz || 0,((input.z || 0)/length)*MOVEMENT.speed,MOVEMENT.acceleration*dt);
-    p.x = Math.max(-22,Math.min(22,p.x+p.vx*dt)); p.z = Math.max(-23,Math.min(23,p.z+p.vz*dt));
-    horizontal(p,casinoSolids(battlefield?.tables));
-    if(input.jump && !p.jumpHeld && p.grounded){p.vy=MOVEMENT.jump;p.grounded=false;}
-    p.jumpHeld=!!input.jump;p.vy=(p.vy||0)-MOVEMENT.gravity*dt;p.y=Math.max(0,(p.y||0)+p.vy*dt);
-    if(p.y===0){p.vy=0;p.grounded=true;}
-    if(input.x || input.z)p.facing=Math.atan2(input.x||0,input.z||0);return;
+    const length = Math.max(1, Math.hypot(input.x || 0, input.z || 0));
+    p.vx = approach(
+      p.vx || 0,
+      ((input.x || 0) / length) * MOVEMENT.speed,
+      MOVEMENT.acceleration * dt,
+    );
+    p.vz = approach(
+      p.vz || 0,
+      ((input.z || 0) / length) * MOVEMENT.speed,
+      MOVEMENT.acceleration * dt,
+    );
+    p.x = Math.max(-22, Math.min(22, p.x + p.vx * dt));
+    p.z = Math.max(-23, Math.min(23, p.z + p.vz * dt));
+    horizontal(p, casinoSolids(battlefield?.tables));
+    if (input.jump && !p.jumpHeld && p.grounded) {
+      p.vy = MOVEMENT.jump;
+      p.grounded = false;
+    }
+    p.jumpHeld = !!input.jump;
+    p.vy = (p.vy || 0) - MOVEMENT.gravity * dt;
+    p.y = Math.max(0, (p.y || 0) + p.vy * dt);
+    if (p.y === 0) {
+      p.vy = 0;
+      p.grounded = true;
+    }
+    if (input.x || input.z) p.facing = Math.atan2(input.x || 0, input.z || 0);
+    return;
   }
   if (world.startsWith("battlefield")) {
     const ix = input.x || 0,
@@ -307,8 +336,17 @@ export function move(
       }
     }
     horizontal(p, boxes);
-    const safePad = world === "lobby" && jumpPads(world,at).some(b => contains(b,p.x,p.z,-0.08));
-    if (world === "lobby" && p.z > 29 && Math.abs(p.x) < 12 && p.y <= 0 && p.vy < -5 && !safePad) {
+    const safePad =
+      world === "lobby" &&
+      jumpPads(world, at).some((b) => contains(b, p.x, p.z, -0.08));
+    if (
+      world === "lobby" &&
+      p.z > 29 &&
+      Math.abs(p.x) < 12 &&
+      p.y <= 0 &&
+      p.vy < -5 &&
+      !safePad
+    ) {
       resetPosition(p);
       p.x = 0;
       p.z = 1;

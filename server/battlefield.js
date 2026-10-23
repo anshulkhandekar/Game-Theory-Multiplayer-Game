@@ -150,14 +150,24 @@ export class Battlefield {
         throw Error("Choose a valid resource amount");
       if (!team.members.includes(data.from) || data.from === owner)
         throw Error("Choose another teammate");
-      const pending = this.transfers.filter(t => t.status === "pending" && t.team === team.id);
-      if (pending.some(t => t.to === owner && t.from === data.from))
+      const pending = this.transfers.filter(
+        (t) => t.status === "pending" && t.team === team.id,
+      );
+      if (pending.some((t) => t.to === owner && t.from === data.from))
         throw Error("You already have a pending request to that teammate");
-      if (pending.filter(t => t.to === owner).length >= 2 || pending.length >= 6)
+      if (
+        pending.filter((t) => t.to === owner).length >= 2 ||
+        pending.length >= 6
+      )
         throw Error("Resolve your team’s pending requests first");
       // Retain bounded history; pending requests are never discarded.
-      const resolved = this.transfers.filter(t => t.status !== "pending").slice(-100);
-      this.transfers = [...this.transfers.filter(t => t.status === "pending"), ...resolved];
+      const resolved = this.transfers
+        .filter((t) => t.status !== "pending")
+        .slice(-100);
+      this.transfers = [
+        ...this.transfers.filter((t) => t.status === "pending"),
+        ...resolved,
+      ];
       this.transfers.push({
         id: randomUUID(),
         team: team.id,
@@ -270,7 +280,10 @@ export class Battlefield {
     };
     if (!internal) {
       this.transactions.set(receiptKey, receipt);
-      this.transactionCounts.set(actor, (this.transactionCounts.get(actor) || 0) + 1);
+      this.transactionCounts.set(
+        actor,
+        (this.transactionCounts.get(actor) || 0) + 1,
+      );
     }
     return receipt;
   }
@@ -559,7 +572,12 @@ export class Battlefield {
         }
       }
     }
-    if (!this.paused && this.phase === "final" && this.game.now() >= this.deadline - 5000) this.spendAbsentResources();
+    if (
+      !this.paused &&
+      this.phase === "final" &&
+      this.game.now() >= this.deadline - 5000
+    )
+      this.spendAbsentResources();
     if (this.paused || !this.deadline || this.game.now() < this.deadline)
       return;
     if (this.phase === "matching") {
@@ -579,17 +597,51 @@ export class Battlefield {
   spendAbsentResources() {
     // Spend only a disconnected member's leftovers, evenly across their fronts.
     // No enemy orders or strength estimates enter this decision.
-    for (const team of this.teams) for (const id of team.members) {
-      const p=this.game.players.get(id);
-      if (!p || p.connected || p.kicked || p.waitingLobby || !(this.wallets[id]>0)) continue;
-      const fronts=this.fronts.filter(f=>[f.a,f.b].includes(team.id));
-      const amount=this.wallets[id], locked=this.locks[id];this.locks[id]=false;
-      try {
-        fronts.forEach((f,i)=>{const quantity=Math.floor(amount/fronts.length)+(i<amount%fronts.length?1:0);if(quantity)this.purchase(id,{front:f.id,unit:"troop",quantity,nonce:randomUUID(),volley:this.game.round},false,true);});
-        this.messages.push({team:team.id,name:"Barracks",text:`${p.name} disconnected. Their remaining ${amount} resources were deployed evenly as troops.`,id:++this.serial});
-        this.messages=this.messages.slice(-100);
-      } finally {this.locks[id]=locked;}
-    }
+    for (const team of this.teams)
+      for (const id of team.members) {
+        const p = this.game.players.get(id);
+        if (
+          !p ||
+          p.connected ||
+          p.kicked ||
+          p.waitingLobby ||
+          !(this.wallets[id] > 0)
+        )
+          continue;
+        const fronts = this.fronts.filter((f) => [f.a, f.b].includes(team.id));
+        const amount = this.wallets[id],
+          locked = this.locks[id];
+        this.locks[id] = false;
+        try {
+          fronts.forEach((f, i) => {
+            const quantity =
+              Math.floor(amount / fronts.length) +
+              (i < amount % fronts.length ? 1 : 0);
+            if (quantity)
+              this.purchase(
+                id,
+                {
+                  front: f.id,
+                  unit: "troop",
+                  quantity,
+                  nonce: randomUUID(),
+                  volley: this.game.round,
+                },
+                false,
+                true,
+              );
+          });
+          this.messages.push({
+            team: team.id,
+            name: "Barracks",
+            text: `${p.name} disconnected. Their remaining ${amount} resources were deployed evenly as troops.`,
+            id: ++this.serial,
+          });
+          this.messages = this.messages.slice(-100);
+        } finally {
+          this.locks[id] = locked;
+        }
+      }
   }
   countdown() {
     if (this.phase !== "final") return;
@@ -623,7 +675,7 @@ export class Battlefield {
         );
         for (const id of team.members) {
           const p = this.game.players.get(id);
-          p.eventsPlayed = {...p.eventsPlayed, battlefield:true};
+          p.eventsPlayed = { ...p.eventsPlayed, battlefield: true };
           p.battlefieldScore =
             (p.battlefieldScore || 0) +
             this.results.reduce(
@@ -638,12 +690,27 @@ export class Battlefield {
             );
         }
       }
-    if (!this.practice && !this.demo) this.game.recordRound("battlefield", this.round,
-      this.teams.flatMap(team => {
-        const fronts = this.results.filter(r => [r.a,r.b].includes(team.id)).map(r => ({front:r.lane+1, opponent:this.teams.find(t=>t.id===(r.a===team.id?r.b:r.a))?.name || "Opponent", points:r.a===team.id?r.leftPoints:r.rightPoints, rivalPoints:r.a===team.id?r.rightPoints:r.leftPoints}));
-        const points = fronts.reduce((sum,f)=>sum+f.points,0);
-        return team.members.filter(id=>!this.game.players.get(id)?.demo).map(id=>({id,team:team.name,points,fronts}));
-      }));
+    if (!this.practice && !this.demo)
+      this.game.recordRound(
+        "battlefield",
+        this.round,
+        this.teams.flatMap((team) => {
+          const fronts = this.results
+            .filter((r) => [r.a, r.b].includes(team.id))
+            .map((r) => ({
+              front: r.lane + 1,
+              opponent:
+                this.teams.find((t) => t.id === (r.a === team.id ? r.b : r.a))
+                  ?.name || "Opponent",
+              points: r.a === team.id ? r.leftPoints : r.rightPoints,
+              rivalPoints: r.a === team.id ? r.rightPoints : r.leftPoints,
+            }));
+          const points = fronts.reduce((sum, f) => sum + f.points, 0);
+          return team.members
+            .filter((id) => !this.game.players.get(id)?.demo)
+            .map((id) => ({ id, team: team.name, points, fronts }));
+        }),
+      );
     this.phase = "reveal";
     this.deadline = this.game.now() + 10000;
     this.game.battlefieldSerial++;

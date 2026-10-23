@@ -1,10 +1,7 @@
 import { LOBBY_TANK } from "../shared/lobby-showcase.js";
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  ADVISORS,
-  nearbyAdvisor,
-} from "../shared/lobby-advisors.js";
+import { ADVISORS, nearbyAdvisor } from "../shared/lobby-advisors.js";
 import { move } from "../shared/movement.js";
 import { Predictor } from "../shared/prediction.js";
 const player = () => ({

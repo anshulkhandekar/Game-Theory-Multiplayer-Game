@@ -9,9 +9,25 @@ export function validateState(saved) {
     typeof saved.registrationOpen !== "boolean"
   )
     throw Error("Invalid registration setting");
-  if (saved.roundHistory !== undefined && (!Array.isArray(saved.roundHistory) || saved.roundHistory.some(r=>
-    !r || !["crowd","battlefield","poker"].includes(r.kind) || !Number.isSafeInteger(r.play) || !Number.isSafeInteger(r.round) || !Number.isFinite(r.endedAt) || !Array.isArray(r.players)))) throw Error("Invalid saved round history");
-  if(saved.lobbyChatEnabled!==undefined && typeof saved.lobbyChatEnabled!=="boolean")throw Error("Invalid lobby chat setting");
+  if (
+    saved.roundHistory !== undefined &&
+    (!Array.isArray(saved.roundHistory) ||
+      saved.roundHistory.some(
+        (r) =>
+          !r ||
+          !["crowd", "battlefield", "poker"].includes(r.kind) ||
+          !Number.isSafeInteger(r.play) ||
+          !Number.isSafeInteger(r.round) ||
+          !Number.isFinite(r.endedAt) ||
+          !Array.isArray(r.players),
+      ))
+  )
+    throw Error("Invalid saved round history");
+  if (
+    saved.lobbyChatEnabled !== undefined &&
+    typeof saved.lobbyChatEnabled !== "boolean"
+  )
+    throw Error("Invalid lobby chat setting");
   const ids = new Set(),
     tokens = new Set();
   for (const p of saved.players) {

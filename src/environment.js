@@ -407,7 +407,14 @@ export function environmentTools({ mesh, ring, label }) {
       practice,
     );
     for (const wall of PRACTICE_HALL_WALLS)
-      mesh(new THREE.BoxGeometry(wall.w,wall.h,wall.d),wall.h===1?'#698781':'#446773',wall.x,wall.y,wall.z,practice);
+      mesh(
+        new THREE.BoxGeometry(wall.w, wall.h, wall.d),
+        wall.h === 1 ? "#698781" : "#446773",
+        wall.x,
+        wall.y,
+        wall.z,
+        practice,
+      );
     mesh(new THREE.BoxGeometry(10.8, 0.25, 12), "#698781", 0, 6, 23, practice);
     mesh(
       new THREE.BoxGeometry(24, 0.5, 33),

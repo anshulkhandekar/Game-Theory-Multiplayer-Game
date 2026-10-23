@@ -1,6 +1,6 @@
-import {defaultBroadcast,updateBroadcast} from "../shared/broadcast.js";
-import { Poker } from './poker.js';
-import { tournamentScores } from '../shared/tournament.js';
+import { defaultBroadcast, updateBroadcast } from "../shared/broadcast.js";
+import { Poker } from "./poker.js";
+import { tournamentScores } from "../shared/tournament.js";
 import { teamPlan } from "../shared/battlefield.js";
 import { Battlefield } from "./battlefield.js";
 import { EMOTE_SECONDS, canEmote } from "../shared/emotes.js";
@@ -45,7 +45,14 @@ export class Game {
     this.players = new Map(
       saved?.players?.map((p) => [
         p.id,
-        { ...p, connected: false, input: {}, ready: false, emoteActive: false, practiceSeat: null },
+        {
+          ...p,
+          connected: false,
+          input: {},
+          ready: false,
+          emoteActive: false,
+          practiceSeat: null,
+        },
       ]) || [],
     );
     for (const p of this.players.values()) {
@@ -55,7 +62,7 @@ export class Game {
         p.name = "Bear";
       }
     }
-    this.broadcast=defaultBroadcast();
+    this.broadcast = defaultBroadcast();
     this.world = "lobby";
     this.stage = 1;
     this.worldTime = 0;
@@ -77,13 +84,27 @@ export class Game {
     let p = [...this.players.values()].find((p) => p.token === id);
     for (const [id, until] of this.reconnectReservations)
       if (until <= this.now()) this.reconnectReservations.delete(id);
-    const occupied = [...this.players.values()].filter(q => !q.demo && !q.kicked &&
-      (q.connected || this.reconnectReservations.has(q.id)));
-    if ((!p || !p.connected) && !this.reconnectReservations.has(p?.id) && occupied.length >= 40)
-      throw Error("The room already has 40 players, including reconnecting players. Ask the host for help.");
+    const occupied = [...this.players.values()].filter(
+      (q) =>
+        !q.demo &&
+        !q.kicked &&
+        (q.connected || this.reconnectReservations.has(q.id)),
+    );
+    if (
+      (!p || !p.connected) &&
+      !this.reconnectReservations.has(p?.id) &&
+      occupied.length >= 40
+    )
+      throw Error(
+        "The room already has 40 players, including reconnecting players. Ask the host for help.",
+      );
     if (!p) {
-      if (!this.registrationOpen) throw Error("Registration is closed. Ask the host to admit you.");
-      if([...this.players.values()].filter(p=>!p.demo).length>=300) throw Error("The room has reached its profile limit. Ask the host for help.");
+      if (!this.registrationOpen)
+        throw Error("Registration is closed. Ask the host to admit you.");
+      if ([...this.players.values()].filter((p) => !p.demo).length >= 300)
+        throw Error(
+          "The room has reached its profile limit. Ask the host for help.",
+        );
       p = {
         id: randomUUID(),
         token: randomUUID(),
@@ -139,7 +160,12 @@ export class Game {
       p.vx = p.vy = p.vz = 0;
       p.grounded = true;
     }
-    if (this.phase === "loading" && !p.eligible && !p.waitingLobby && !p.officer) {
+    if (
+      this.phase === "loading" &&
+      !p.eligible &&
+      !p.waitingLobby &&
+      !p.officer
+    ) {
       const angle =
         [...this.players.values()].findIndex((other) => other.id === p.id) *
         2.4;
@@ -169,12 +195,20 @@ export class Game {
     if (this.poker) {
       p.waitingLobby = !this.poker.roster.includes(p.id);
       p.eligible = !p.waitingLobby;
-      if (p.pokerRemoved) {p.waitingLobby=true;p.eligible=false;}
-      if (!p.waitingLobby && this.poker.phase !== 'instructions') this.poker.seat(this.poker.tableOf(p.id));
+      if (p.pokerRemoved) {
+        p.waitingLobby = true;
+        p.eligible = false;
+      }
+      if (!p.waitingLobby && this.poker.phase !== "instructions")
+        this.poker.seat(this.poker.tableOf(p.id));
     }
     p.connected = true;
     this.reconnectReservations.delete(p.id);
-    if (this.battlefield?.phase === "matching" && !this.battlefield.demo && !p.officer) {
+    if (
+      this.battlefield?.phase === "matching" &&
+      !this.battlefield.demo &&
+      !p.officer
+    ) {
       if (
         !this.battlefield.roster.includes(p.id) &&
         this.battlefield.roster.length < 40
@@ -192,19 +226,48 @@ export class Game {
     p.connected = false;
     p.practiceSeat = null;
     p.input = {};
-    if (reserve && !p.kicked && !p.demo) this.reconnectReservations.set(p.id, this.now() + 30000);
+    if (reserve && !p.kicked && !p.demo)
+      this.reconnectReservations.set(p.id, this.now() + 30000);
     else this.reconnectReservations.delete(p.id);
   }
   recordRound(kind, round, players) {
-    this.roundHistory.push({play:this.roundHistory.length + 1, kind, round, endedAt:this.now(), players});
+    this.roundHistory.push({
+      play: this.roundHistory.length + 1,
+      kind,
+      round,
+      endedAt: this.now(),
+      players,
+    });
   }
   practiceSeat(p, kind) {
-    if (kind === null) {p.practiceSeat = null; return;}
-    if (this.world !== "lobby" || this.phase !== "lobby" || this.battlefield || this.poker) throw Error("Practice is only available in the lobby");
-    const inside = kind === "blotto" ? inBlottoRoom(p) : kind === "poker" && inPokerRoom(p);
+    if (kind === null) {
+      p.practiceSeat = null;
+      return;
+    }
+    if (
+      this.world !== "lobby" ||
+      this.phase !== "lobby" ||
+      this.battlefield ||
+      this.poker
+    )
+      throw Error("Practice is only available in the lobby");
+    const inside =
+      kind === "blotto" ? inBlottoRoom(p) : kind === "poker" && inPokerRoom(p);
     if (!inside) throw Error("Walk into the practice room first");
     this.stopEmote(p);
-    Object.assign(p, {practiceSeat:kind, x:kind === "blotto" ? 22 : -22, z:kind === "blotto" ? 40.85 : 43.15, y:0, facing:kind === "blotto" ? 0 : Math.PI, vx:0, vy:0, vz:0, input:{}, grounded:true, respawns:(p.respawns || 0)+1});
+    Object.assign(p, {
+      practiceSeat: kind,
+      x: kind === "blotto" ? 22 : -22,
+      z: kind === "blotto" ? 40.85 : 43.15,
+      y: 0,
+      facing: kind === "blotto" ? 0 : Math.PI,
+      vx: 0,
+      vy: 0,
+      vz: 0,
+      input: {},
+      grounded: true,
+      respawns: (p.respawns || 0) + 1,
+    });
   }
   message(p, kind, text, emote = false) {
     this.messages.push({
@@ -213,7 +276,7 @@ export class Game {
       name: p.name,
       text,
       time: this.now(),
-      ...(emote ? {emote:true} : {}),
+      ...(emote ? { emote: true } : {}),
     });
     if (this.messages.length > 80) this.messages.shift();
   }
@@ -224,7 +287,8 @@ export class Game {
         !["lobby", "ready", "instructions"].includes(this.phase))
     )
       throw Error("Chat is available in the lobby");
-    if (!this.lobbyChatEnabled) throw Error("Lobby chat is disabled by the host.");
+    if (!this.lobbyChatEnabled)
+      throw Error("Lobby chat is disabled by the host.");
     if (typeof text !== "string") throw Error("Invalid message");
     const clean = text
       .normalize("NFKC")
@@ -249,7 +313,14 @@ export class Game {
     p.emoteActive = true;
     p.emoteFacing = p.facing ?? Math.PI;
     p.emoteStoppedAt = undefined;
-    this.message(p, this.world === "lobby" || p.waitingLobby ? "chat" : "event", {wave:"waved", scuba:"scuba-ed", dance:"danced", griddy:"griddied"}[emote], true);
+    this.message(
+      p,
+      this.world === "lobby" || p.waitingLobby ? "chat" : "event",
+      { wave: "waved", scuba: "scuba-ed", dance: "danced", griddy: "griddied" }[
+        emote
+      ],
+      true,
+    );
   }
   stopEmote(p) {
     if (!p.emoteActive) return;
@@ -270,7 +341,13 @@ export class Game {
     return clean;
   }
   customize(p, appearance) {
-    if (this.world !== "lobby" || this.phase !== "lobby" || !p.connected || p.kicked || p.demo)
+    if (
+      this.world !== "lobby" ||
+      this.phase !== "lobby" ||
+      !p.connected ||
+      p.kicked ||
+      p.demo
+    )
       throw Error("Change your outfit while waiting in the main lobby.");
     if (this.now() - (this.customizedAt.get(p.id) ?? -Infinity) < 2000)
       throw Error("Wait two seconds before changing your outfit again.");
@@ -320,28 +397,73 @@ export class Game {
     });
   }
   command(action, data = {}) {
-    if (action === "lobbyChat") {if(typeof data.enabled!=="boolean")throw Error("Choose whether lobby chat is enabled");this.lobbyChatEnabled=data.enabled;return;}
-    if (action === "registration") {this.registrationOpen = !data.locked; return;}
-    if(action === "broadcast"){this.broadcast=updateBroadcast(this.broadcast,data,this);return;}
-    if (action === 'officer') {
-      if (this.phase !== 'lobby') throw Error('Assign officers in the lobby');
-      const p = this.players.get(data.id); if (!p || p.demo) throw Error('Unknown player');
-      p.officer = !!data.officer; p.eligible = false; return;
+    if (action === "lobbyChat") {
+      if (typeof data.enabled !== "boolean")
+        throw Error("Choose whether lobby chat is enabled");
+      this.lobbyChatEnabled = data.enabled;
+      return;
     }
-    if (action === 'poker' || action === 'pokerDemo') {
-      if (!['lobby','results'].includes(this.phase)) throw Error('Return to the lobby first');
+    if (action === "registration") {
+      this.registrationOpen = !data.locked;
+      return;
+    }
+    if (action === "broadcast") {
+      this.broadcast = updateBroadcast(this.broadcast, data, this);
+      return;
+    }
+    if (action === "officer") {
+      if (this.phase !== "lobby") throw Error("Assign officers in the lobby");
+      const p = this.players.get(data.id);
+      if (!p || p.demo) throw Error("Unknown player");
+      p.officer = !!data.officer;
+      p.eligible = false;
+      return;
+    }
+    if (action === "poker" || action === "pokerDemo") {
+      if (!["lobby", "results"].includes(this.phase))
+        throw Error("Return to the lobby first");
       const count = data.count;
-      if (action === 'pokerDemo' && (!Number.isInteger(count) || count < 2 || count > 40)) throw Error('Choose 2–40 participants');
-      const n = [...this.players.values()].filter(p => p.connected && !p.officer && !p.kicked && !p.demo).length;
-      if (action === 'poker' && (n < 1 || n > 40)) throw Error('Poker needs 1–40 participants');
-      this.command('lobby'); this.poker = new Poker(this, action === 'pokerDemo' ? {demoCount:count} : {});
-      this.phase = 'poker'; this.world = 'casino'; this.round++; return;
+      if (
+        action === "pokerDemo" &&
+        (!Number.isInteger(count) || count < 2 || count > 40)
+      )
+        throw Error("Choose 2–40 participants");
+      const n = [...this.players.values()].filter(
+        (p) => p.connected && !p.officer && !p.kicked && !p.demo,
+      ).length;
+      if (action === "poker" && (n < 1 || n > 40))
+        throw Error("Poker needs 1–40 participants");
+      this.command("lobby");
+      this.poker = new Poker(
+        this,
+        action === "pokerDemo" ? { demoCount: count } : {},
+      );
+      this.phase = "poker";
+      this.world = "casino";
+      this.round++;
+      return;
     }
-    if (action.startsWith('poker:')) {
-      if (!this.poker) throw Error('Load Poker first'); this.poker.command(action.slice(6),data); return;
+    if (action.startsWith("poker:")) {
+      if (!this.poker) throw Error("Load Poker first");
+      this.poker.command(action.slice(6), data);
+      return;
     }
-    if (this.poker && ['pause','resume'].includes(action)) {this.poker.command(action,data);return;}
-    if (this.poker && !['lobby','leaderboard','playerLobby','disconnectPlayer','kickPlayer','allowPlayer'].includes(action)) throw Error('Use the Poker controls');
+    if (this.poker && ["pause", "resume"].includes(action)) {
+      this.poker.command(action, data);
+      return;
+    }
+    if (
+      this.poker &&
+      ![
+        "lobby",
+        "leaderboard",
+        "playerLobby",
+        "disconnectPlayer",
+        "kickPlayer",
+        "allowPlayer",
+      ].includes(action)
+    )
+      throw Error("Use the Poker controls");
     if (["battlefield", "battlefieldDemo"].includes(action)) {
       if (!["lobby", "results"].includes(this.phase))
         throw Error("Finish the current activity first");
@@ -417,7 +539,10 @@ export class Game {
         return;
       }
       this.sendToLobby(p);
-      if (this.poker) {p.waitingLobby=true;p.pokerRemoved=true;}
+      if (this.poker) {
+        p.waitingLobby = true;
+        p.pokerRemoved = true;
+      }
       if (this.battlefield) {
         p.waitingLobby = true;
         if (this.battlefield.phase === "matching")
@@ -576,7 +701,7 @@ export class Game {
     this.round++;
     this.practice = practice;
     this.results = [];
-    this.messages = this.messages.filter(m => m.kind === "chat");
+    this.messages = this.messages.filter((m) => m.kind === "chat");
     this.paused = false;
     const nextWorld = `arena${this.stage}`;
     this.phase = "loading";
@@ -587,7 +712,9 @@ export class Game {
       reward: this.rewardPools[v.id],
     }));
     this.deadline = 0;
-    const ps = [...this.players.values()].filter((p) => p.connected && !p.officer);
+    const ps = [...this.players.values()].filter(
+      (p) => p.connected && !p.officer,
+    );
     ps.forEach((p, i) => {
       const a = (i / ps.length) * Math.PI * 2;
       p.x = Math.cos(a) * 2.5;
@@ -612,7 +739,11 @@ export class Game {
       p.loaded = false;
       p.input = {};
     });
-    for (const p of this.players.values()) if (!p.connected || p.officer) {p.eligible = false; if(p.officer)p.waitingLobby=true;}
+    for (const p of this.players.values())
+      if (!p.connected || p.officer) {
+        p.eligible = false;
+        if (p.officer) p.waitingLobby = true;
+      }
   }
   zone(p) {
     return this.vaults.find((v) => insideVault(p, v))?.id || null;
@@ -636,7 +767,10 @@ export class Game {
         const vault = p.connected ? this.zone(p) : null;
         const v = this.vaults.find((v) => v.id === vault);
         const payout = v ? v.reward / counts[v.id] : 0;
-        if (!this.practice) {p.earnings += payout; p.eventsPlayed = {...p.eventsPlayed, crowd:true};}
+        if (!this.practice) {
+          p.earnings += payout;
+          p.eventsPlayed = { ...p.eventsPlayed, crowd: true };
+        }
         return {
           id: p.id,
           name: p.name,
@@ -649,7 +783,11 @@ export class Game {
       });
     if (!this.practice) {
       this.scoredRound++;
-      this.recordRound("crowd", this.stage, this.results.map(r => ({...r})));
+      this.recordRound(
+        "crowd",
+        this.stage,
+        this.results.map((r) => ({ ...r })),
+      );
     }
     this.phase = "results";
     this.paused = false;
@@ -657,9 +795,13 @@ export class Game {
   }
   tick(dt) {
     if (this.poker) {
-      for (const p of this.players.values()) if (p.emoteActive && this.now() >= p.emoteEndsAt) this.stopEmote(p);
+      for (const p of this.players.values())
+        if (p.emoteActive && this.now() >= p.emoteEndsAt) this.stopEmote(p);
       this.poker.tick(dt);
-      if (!this.poker.paused) {this.worldTime += dt; this.lobbyTime += dt;}
+      if (!this.poker.paused) {
+        this.worldTime += dt;
+        this.lobbyTime += dt;
+      }
       return;
     }
     if (this.phase === "battlefield" && this.battlefield) {
@@ -812,9 +954,9 @@ export class Game {
   snapshot() {
     const points = tournamentScores([...this.players.values()]);
     return {
-      registrationOpen:this.registrationOpen,
-      lobbyChatEnabled:this.lobbyChatEnabled,
-      broadcast:this.broadcast,
+      registrationOpen: this.registrationOpen,
+      lobbyChatEnabled: this.lobbyChatEnabled,
+      broadcast: this.broadcast,
       poker: this.poker?.snapshot() || null,
       phase: this.phase,
       battlefield: this.battlefield?.snapshot() || null,
@@ -865,7 +1007,18 @@ export class Game {
       scoredRound: this.scoredRound,
       players: [...this.players.values()]
         .filter((p) => !p.demo)
-        .map(({ input, vy, inputSequence, inputAck, pageId, lobbyTankAt, pokerRemoved, ...p }) => p),
+        .map(
+          ({
+            input,
+            vy,
+            inputSequence,
+            inputAck,
+            pageId,
+            lobbyTankAt,
+            pokerRemoved,
+            ...p
+          }) => p,
+        ),
     };
   }
 }

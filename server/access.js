@@ -16,7 +16,7 @@ export function createAccess({
 }) {
   if (production && (!eventCode || !hostKey || !spectatorKey))
     throw Error(
-      "Production requires EVENT_CODE, HOST_KEY and SPECTATOR_KEY. See HOSTING_GUIDE.md.",
+      "Production requires EVENT_CODE, HOST_KEY and SPECTATOR_KEY. See the deployment section in README.md.",
     );
   if (
     eventCode &&

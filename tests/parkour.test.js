@@ -161,12 +161,26 @@ for (const stage of [2, 3, 4, 5])
   test(`round ${stage}: all three routes are reachable with actual collision and hazard rules`, () => {
     for (const route of ["bronze", "gold", "diamond"]) {
       const p = { x: 0, z: 1, y: 0, vy: 0, grounded: true, support: "spawn" };
-      const first = platforms(0, stage).find(s=>s.route===route);
-      const factor = 5.6 / Math.max(Math.abs(first.x),Math.abs(first.z-1));
+      const first = platforms(0, stage).find((s) => s.route === route);
+      const factor = 5.6 / Math.max(Math.abs(first.x), Math.abs(first.z - 1));
       // Walk to the launch edge on the enlarged spawn before jumping the gap.
-      for(let n=0;n<300 && Math.hypot(p.x-first.x*factor,p.z-(1+(first.z-1)*factor))>.12;n++) {
-        const dx=first.x*factor-p.x,dz=1+(first.z-1)*factor-p.z,d=Math.hypot(dx,dz);
-        move(p,{x:dx/d*Math.min(1,d),z:dz/d*Math.min(1,d)},.02,`arena${stage}`,0);
+      for (
+        let n = 0;
+        n < 300 &&
+        Math.hypot(p.x - first.x * factor, p.z - (1 + (first.z - 1) * factor)) >
+          0.12;
+        n++
+      ) {
+        const dx = first.x * factor - p.x,
+          dz = 1 + (first.z - 1) * factor - p.z,
+          d = Math.hypot(dx, dz);
+        move(
+          p,
+          { x: (dx / d) * Math.min(1, d), z: (dz / d) * Math.min(1, d) },
+          0.02,
+          `arena${stage}`,
+          0,
+        );
       }
       let time = 0;
       const stones = platforms(0, stage)
@@ -245,8 +259,15 @@ for (const stage of [2, 3, 4, 5])
   });
 
 test("round 2 assists adjacent rising ledges without Space; round 3 requires a jump", () => {
-  const stone = platforms(0,2).find(s=>s.id==="gold-1");
-  const p = { x: stone.x, z: stone.z, y: stone.y, vy: 0, grounded: true, support: stone.id };
+  const stone = platforms(0, 2).find((s) => s.id === "gold-1");
+  const p = {
+    x: stone.x,
+    z: stone.z,
+    y: stone.y,
+    vy: 0,
+    grounded: true,
+    support: stone.id,
+  };
   let highest = 0;
   for (let i = 1; i <= 120; i++) {
     move(p, { z: -1 }, 0.02, "arena2", i * 0.02);

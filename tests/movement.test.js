@@ -35,9 +35,11 @@ test("holding Space produces one jump; releasing enables the next jump", () => {
   move(p, { jump: true }, 0.05);
   assert.ok(p.y > 0);
 });
-test('landing absorbs airborne horizontal momentum on a platform', () => {
-  const p = {x:0,z:0,y:1,vy:-8,vx:5,vz:0,grounded:false};
-  for(let i=0;i<120 && !p.grounded;i++) move(p,{},1/120,'arena2',i/120);
-  assert.equal(p.grounded,true);
-  assert.equal(p.vx,0); assert.equal(p.vz,0);
+test("landing absorbs airborne horizontal momentum on a platform", () => {
+  const p = { x: 0, z: 0, y: 1, vy: -8, vx: 5, vz: 0, grounded: false };
+  for (let i = 0; i < 120 && !p.grounded; i++)
+    move(p, {}, 1 / 120, "arena2", i / 120);
+  assert.equal(p.grounded, true);
+  assert.equal(p.vx, 0);
+  assert.equal(p.vz, 0);
 });

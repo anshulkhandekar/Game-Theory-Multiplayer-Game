@@ -89,7 +89,9 @@ test(
     const g = new Game(),
       p = g.join(null, "Retained");
     p.earnings = 123;
-    g.recordRound("crowd",1,[{id:p.id,vault:"bronze",payout:123,occupants:1,reward:123}]);
+    g.recordRound("crowd", 1, [
+      { id: p.id, vault: "bronze", payout: 123, occupants: 1, reward: 123 },
+    ]);
     fs.writeFileSync(file, JSON.stringify(g.save()));
     await start();
     assert.equal((await fetch(http() + "/health")).status, 200);
@@ -142,8 +144,8 @@ test(
     assert.ok(!JSON.stringify(state).includes(p.token));
     const host = await connect(secrets.HOST_KEY, "host");
     await wait(host, (m) => m.type === "auth" && m.ok);
-    const history = await wait(host,m=>m.type==="history");
-    assert.equal(history.rounds[0].players[0].payout,123);
+    const history = await wait(host, (m) => m.type === "history");
+    assert.equal(history.rounds[0].players[0].payout, 123);
     send(player, { type: "host", action: "lobby" });
     await wait(
       player,
@@ -152,11 +154,22 @@ test(
     const projector = await connect(secrets.SPECTATOR_KEY, "projector");
     send(projector, { type: "observe" });
     await wait(projector, (m) => m.type === "state");
-    assert.ok(!projector.messages.some(m=>m.type==="history"));
-    assert.ok(!player.messages.some(m=>m.type==="history"));
-    send(host,{type:"host",action:"broadcast",data:{soundEnabled:false}});
-    await wait(projector,m=>m.type==="state"&&m.state.broadcast.soundEnabled===false);
-    send(host,{type:"host",action:"broadcast",data:{soundEnabled:true}});
+    assert.ok(!projector.messages.some((m) => m.type === "history"));
+    assert.ok(!player.messages.some((m) => m.type === "history"));
+    send(host, {
+      type: "host",
+      action: "broadcast",
+      data: { soundEnabled: false },
+    });
+    await wait(
+      projector,
+      (m) => m.type === "state" && m.state.broadcast.soundEnabled === false,
+    );
+    send(host, {
+      type: "host",
+      action: "broadcast",
+      data: { soundEnabled: true },
+    });
     send(projector, { type: "join", name: "Forbidden" });
     await wait(
       projector,
@@ -170,19 +183,63 @@ test(
     const excess = await connect(secrets.SPECTATOR_KEY);
     send(excess, { type: "observe" });
     await wait(excess, (m) => m.type === "error" && /limit/.test(m.message));
-    send(host,{type:"host",action:"lobbyChat",data:{enabled:false}});
-    await wait(player,m=>m.type==="state"&&m.state.lobbyChatEnabled===false);
-    send(player,{type:"chat",text:"Should not be accepted"});
-    await wait(player,m=>m.type==="error"&&/chat is disabled/.test(m.message));
-    const other=await connect(secrets.EVENT_CODE);send(other,{type:"join",name:"Teammate"});await wait(other,m=>m.type==="identity");
-    send(host,{type:"host",action:"battlefield"});await wait(host,m=>m.type==="state"&&m.state.battlefield?.phase==="matching");
-    send(host,{type:"host",action:"battle:match"});await wait(host,m=>m.type==="state"&&m.state.battlefield?.phase==="staging");
-    send(player,{type:"battle",action:"chat",data:{text:"First team private"}});send(other,{type:"battle",action:"chat",data:{text:"Second team private"}});
-    await wait(host,m=>m.type==="teamChats"&&m.messages.length===2);
-    const privateView=await wait(other,m=>m.type==="state"&&m.state.battlefield?.messages.some(q=>q.text==="Second team private"));
-    assert.ok(!privateView.state.battlefield.messages.some(q=>q.text==="First team private"));
-    assert.ok(!player.messages.some(m=>m.type==="teamChats"));assert.ok(!projector.messages.some(m=>m.type==="teamChats"));
-    send(host,{type:"host",action:"lobby"});await wait(host,m=>m.type==="state"&&m.state.world==="lobby"&&m.state.lobbyChatEnabled===false);
+    send(host, { type: "host", action: "lobbyChat", data: { enabled: false } });
+    await wait(
+      player,
+      (m) => m.type === "state" && m.state.lobbyChatEnabled === false,
+    );
+    send(player, { type: "chat", text: "Should not be accepted" });
+    await wait(
+      player,
+      (m) => m.type === "error" && /chat is disabled/.test(m.message),
+    );
+    const other = await connect(secrets.EVENT_CODE);
+    send(other, { type: "join", name: "Teammate" });
+    await wait(other, (m) => m.type === "identity");
+    send(host, { type: "host", action: "battlefield" });
+    await wait(
+      host,
+      (m) => m.type === "state" && m.state.battlefield?.phase === "matching",
+    );
+    send(host, { type: "host", action: "battle:match" });
+    await wait(
+      host,
+      (m) => m.type === "state" && m.state.battlefield?.phase === "staging",
+    );
+    send(player, {
+      type: "battle",
+      action: "chat",
+      data: { text: "First team private" },
+    });
+    send(other, {
+      type: "battle",
+      action: "chat",
+      data: { text: "Second team private" },
+    });
+    await wait(host, (m) => m.type === "teamChats" && m.messages.length === 2);
+    const privateView = await wait(
+      other,
+      (m) =>
+        m.type === "state" &&
+        m.state.battlefield?.messages.some(
+          (q) => q.text === "Second team private",
+        ),
+    );
+    assert.ok(
+      !privateView.state.battlefield.messages.some(
+        (q) => q.text === "First team private",
+      ),
+    );
+    assert.ok(!player.messages.some((m) => m.type === "teamChats"));
+    assert.ok(!projector.messages.some((m) => m.type === "teamChats"));
+    send(host, { type: "host", action: "lobby" });
+    await wait(
+      host,
+      (m) =>
+        m.type === "state" &&
+        m.state.world === "lobby" &&
+        m.state.lobbyChatEnabled === false,
+    );
     for (const ws of sockets) ws.terminate();
     await stop();
     await start();

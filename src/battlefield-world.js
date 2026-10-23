@@ -642,14 +642,19 @@ export function createBattlefieldWorld(scene, label) {
           }
         }
         if (fighting) {
-          facing = Math.atan2(s.position.x-s.target.x,s.position.z-s.target.z);
-          s.facing=facing;
+          facing = Math.atan2(
+            s.position.x - s.target.x,
+            s.position.z - s.target.z,
+          );
+          s.facing = facing;
           if (!reduced && s.type !== "fort") {
-            const advance=Math.min(.23,progress*.028);
-            s.position.lerp(s.target,advance);
-            if(s.type==="troop") s.position.y=.06+Math.abs(Math.sin(clock*10+s.index))*.1;
+            const advance = Math.min(0.23, progress * 0.028);
+            s.position.lerp(s.target, advance);
+            if (s.type === "troop")
+              s.position.y =
+                0.06 + Math.abs(Math.sin(clock * 10 + s.index)) * 0.1;
           }
-        } else s.facing=facing;
+        } else s.facing = facing;
         if (s.type === "troop" && !reduced && travel > 0 && travel < 1)
           s.position.y += Math.abs(Math.sin(age * 11)) * 0.12;
         quaternion.setFromAxisAngle(axis, facing);

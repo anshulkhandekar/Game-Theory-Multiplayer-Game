@@ -1,5 +1,5 @@
 {
-  "name": "aggie-crowd-rush",
+  "name": "game-theory-workshop",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,8 +8,14 @@
     "start": "NODE_ENV=production node server/index.js",
     "test": "node --test tests/*.test.js",
     "load": "node tests/load.js",
-    "format": "prettier --write src server shared tests *.md *.json index.html",
-    "test:integration": "node --test tests/server-integration.mjs"
+    "format": "prettier --write .",
+    "test:integration": "node --test tests/server-integration.mjs",
+    "format:check": "prettier --check .",
+    "check": "npm run format:check && npm test && npm run build && npm run test:integration",
+    "load:crowd": "node tests/load.js",
+    "load:battlefield": "node tests/battlefield-load.mjs",
+    "load:poker": "node tests/poker-load.mjs",
+    "load:traffic": "node tests/traffic-load.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",
@@ -22,5 +28,6 @@
   },
   "engines": {
     "node": ">=22.12.0 <23"
-  }
+  },
+  "description": "Server-authoritative 3D multiplayer workshops for Crowd Rush, Colonel Blotto, and Kuhn Poker."
 }

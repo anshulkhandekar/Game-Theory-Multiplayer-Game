@@ -318,22 +318,57 @@ test("casino exploration caps diagonal speed and blocks roulette, while seated s
   assert.ok(q.x < 18.4);
 });
 
-test('Poker seating countdown hides cards, prevents early actions and pauses its clock',()=>{
- const {g,ps,advance}=setup();g.command('poker');g.command('poker:forceStart');
- assert.equal(g.poker.phase,'countdown');assert.equal(canMove(g.snapshot(),ps[0]),false);
- assert.equal(g.snapshotFor(ps[0].id).poker.tables[0].ownCard,undefined);
- assert.throws(()=>g.poker.act(ps[0].id,'check',{}));
- advance(2000);assert.equal(g.poker.snapshot().countdown,3);
- g.command('poker:pause');advance(60000);assert.equal(g.poker.snapshot().countdown,3);
- g.command('poker:resume');advance(2999);assert.equal(g.poker.phase,'countdown');
- advance(1);assert.equal(g.poker.phase,'playing');assert.ok(RANKS.includes(g.snapshotFor(ps[0].id).poker.tables[0].ownCard));
- assert.equal(g.poker.tables[0].deadline-g.now(),12000);
+test("Poker seating countdown hides cards, prevents early actions and pauses its clock", () => {
+  const { g, ps, advance } = setup();
+  g.command("poker");
+  g.command("poker:forceStart");
+  assert.equal(g.poker.phase, "countdown");
+  assert.equal(canMove(g.snapshot(), ps[0]), false);
+  assert.equal(g.snapshotFor(ps[0].id).poker.tables[0].ownCard, undefined);
+  assert.throws(() => g.poker.act(ps[0].id, "check", {}));
+  advance(2000);
+  assert.equal(g.poker.snapshot().countdown, 3);
+  g.command("poker:pause");
+  advance(60000);
+  assert.equal(g.poker.snapshot().countdown, 3);
+  g.command("poker:resume");
+  advance(2999);
+  assert.equal(g.poker.phase, "countdown");
+  advance(1);
+  assert.equal(g.poker.phase, "playing");
+  assert.ok(RANKS.includes(g.snapshotFor(ps[0].id).poker.tables[0].ownCard));
+  assert.equal(g.poker.tables[0].deadline - g.now(), 12000);
 });
-test('Lobby outfit changes preserve identity and scores and reject changes during games',()=>{
- const {g,ps}=setup();const p=ps[0];p.earnings=30;p.battlefieldScore=5;p.pokerScore=-2;const identity=[p.id,p.token];
- g.customize(p,{bear:'polar',hat:'frog'});assert.equal(p.appearance.bear,'polar');assert.equal(p.appearance.hat,'frog');assert.deepEqual([p.id,p.token],identity);assert.deepEqual([p.earnings,p.battlefieldScore,p.pokerScore],[30,5,-2]);
- const restored=new Game({saved:g.save()});assert.equal(restored.players.get(p.id).appearance.hat,'frog');
- g.command('poker');assert.throws(()=>g.customize(p,{bear:'red'}));
+test("Lobby outfit changes preserve identity and scores and reject changes during games", () => {
+  const { g, ps } = setup();
+  const p = ps[0];
+  p.earnings = 30;
+  p.battlefieldScore = 5;
+  p.pokerScore = -2;
+  const identity = [p.id, p.token];
+  g.customize(p, { bear: "polar", hat: "frog" });
+  assert.equal(p.appearance.bear, "polar");
+  assert.equal(p.appearance.hat, "frog");
+  assert.deepEqual([p.id, p.token], identity);
+  assert.deepEqual([p.earnings, p.battlefieldScore, p.pokerScore], [30, 5, -2]);
+  const restored = new Game({ saved: g.save() });
+  assert.equal(restored.players.get(p.id).appearance.hat, "frog");
+  g.command("poker");
+  assert.throws(() => g.customize(p, { bear: "red" }));
 });
 
-test('Five-player Poker rotates the bot seat once per participant across five rounds',()=>{const {g,ps}=setup(5);g.command('poker');const seen=new Map(ps.map(p=>[p.id,0]));for(let r=1;r<=5;r++){g.poker.round=r;g.poker.prepare();for(const t of g.poker.tables)if(t.players.includes('poker-bot-40')){const id=t.players.find(id=>id!=='poker-bot-40');seen.set(id,seen.get(id)+1);}}assert.deepEqual([...seen.values()],[1,1,1,1,1]);});
+test("Five-player Poker rotates the bot seat once per participant across five rounds", () => {
+  const { g, ps } = setup(5);
+  g.command("poker");
+  const seen = new Map(ps.map((p) => [p.id, 0]));
+  for (let r = 1; r <= 5; r++) {
+    g.poker.round = r;
+    g.poker.prepare();
+    for (const t of g.poker.tables)
+      if (t.players.includes("poker-bot-40")) {
+        const id = t.players.find((id) => id !== "poker-bot-40");
+        seen.set(id, seen.get(id) + 1);
+      }
+  }
+  assert.deepEqual([...seen.values()], [1, 1, 1, 1, 1]);
+});

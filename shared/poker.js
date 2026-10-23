@@ -1,4 +1,10 @@
-export const POKER = { hands: 2, rounds: 5, turnSeconds: 12, revealSeconds: 4, countdownSeconds: 5 };
+export const POKER = {
+  hands: 2,
+  rounds: 5,
+  turnSeconds: 12,
+  revealSeconds: 4,
+  countdownSeconds: 5,
+};
 export const RANKS = ["J", "Q", "K"];
 export const inPokerRoom = (p) =>
   !!p && p.x >= -30 && p.x <= -14 && p.z >= 29 && p.z <= 53;

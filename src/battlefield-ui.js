@@ -1,4 +1,4 @@
-import {battlefieldAudience} from "./broadcast-audience.js";
+import { battlefieldAudience } from "./broadcast-audience.js";
 import { frontReport } from "../shared/battlefield-results.js";
 import {
   battlefieldLessons,
@@ -496,13 +496,18 @@ export function createBattlefieldUI({ send, escape, view, scene, toast }) {
           `<div class="score"><span class="player-name">${escape(t.name)}</span><b>${t.score}</b></div>`,
       )
       .join("");
-    if(view === "projector") {
-      if(b.phase==="matching") document.querySelector("#headline").textContent="Teams Being Formed";
-      document.querySelector("#personal").style.display="none";
+    if (view === "projector") {
+      if (b.phase === "matching")
+        document.querySelector("#headline").textContent = "Teams Being Formed";
+      document.querySelector("#personal").style.display = "none";
       root.classList.add("audience-only");
-      const next=JSON.stringify([b.phase,b.round,b.results]);
-      if(next!==key){key=next;root.innerHTML=battlefieldAudience(state,escape);}
-      document.querySelector("#board").style.display=b.phase==="matching"?"none":"";
+      const next = JSON.stringify([b.phase, b.round, b.results]);
+      if (next !== key) {
+        key = next;
+        root.innerHTML = battlefieldAudience(state, escape);
+      }
+      document.querySelector("#board").style.display =
+        b.phase === "matching" ? "none" : "";
       return;
     }
     const newKey = JSON.stringify([

@@ -1,8 +1,24 @@
 import { BLOTTO_WALLS } from "./blotto.js";
 // Both side branches share a full-height wall before their doorway and a lintel above it.
-export const PRACTICE_HALL_WALLS = [-1,1].flatMap(side => [
-  {id:`practice-hall-${side}`,x:side*5.4,y:3,z:20,w:.3,h:6,d:6},
-  {id:`practice-lintel-${side}`,x:side*5.4,y:5.5,z:26,w:.3,h:1,d:6}
+export const PRACTICE_HALL_WALLS = [-1, 1].flatMap((side) => [
+  {
+    id: `practice-hall-${side}`,
+    x: side * 5.4,
+    y: 3,
+    z: 20,
+    w: 0.3,
+    h: 6,
+    d: 6,
+  },
+  {
+    id: `practice-lintel-${side}`,
+    x: side * 5.4,
+    y: 5.5,
+    z: 26,
+    w: 0.3,
+    h: 1,
+    d: 6,
+  },
 ]);
 // The renderer and authoritative simulation consume these same dimensions.
 export const STAGES = [
@@ -515,7 +531,15 @@ export function solids(world, time = 0) {
   const furniture = [-1, 1].flatMap((side) => {
     const sofa = { x: side * 9, z: 0, angle: (-side * Math.PI) / 2 };
     return [
-      {id:`bookcase-${side}`,x:side*12.4,z:4.9,y:1.6,w:1.3,d:2.7,h:3.2},
+      {
+        id: `bookcase-${side}`,
+        x: side * 12.4,
+        z: 4.9,
+        y: 1.6,
+        w: 1.3,
+        d: 2.7,
+        h: 3.2,
+      },
       { ...sofa, id: `sofa-seat-${side}`, y: 0.4625, w: 4, d: 1.5, h: 0.925 },
       {
         ...toWorld({ x: 0, z: -0.7 }, sofa),
@@ -565,11 +589,11 @@ export function solids(world, time = 0) {
     h: 2.1,
   });
   return cacheSet(solidCache, key, [
-    {id:"skin-locker",x:12,z:6,y:1.65,w:.8,d:2.4,h:3.3},
+    { id: "skin-locker", x: 12, z: 6, y: 1.65, w: 0.8, d: 2.4, h: 3.3 },
     ...PRACTICE_HALL_WALLS,
-    ...BLOTTO_WALLS.map((b,i) => ({...b,x:-b.x,id:"poker-wall-"+i})),
-    { id:"poker-hall-floor",x:-13,z:26.5,y:-0.3,w:26,d:7,h:0.5 },
-    { id:"poker-room-floor",x:-22,z:41,y:-0.3,w:16,d:24,h:0.5 },
+    ...BLOTTO_WALLS.map((b, i) => ({ ...b, x: -b.x, id: "poker-wall-" + i })),
+    { id: "poker-hall-floor", x: -13, z: 26.5, y: -0.3, w: 26, d: 7, h: 0.5 },
+    { id: "poker-room-floor", x: -22, z: 41, y: -0.3, w: 16, d: 24, h: 0.5 },
     { id: "blotto-hall-floor", x: 13, z: 26.5, y: -0.3, w: 26, d: 7, h: 0.5 },
     ...BLOTTO_WALLS.map((b, i) => ({ ...b, id: "blotto-wall-" + i })),
     { id: "blotto-room-floor", x: 22, z: 41, y: -0.3, w: 16, d: 24, h: 0.5 },
