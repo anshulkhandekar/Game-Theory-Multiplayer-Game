@@ -1,5 +1,7 @@
 # Game Theory Workshop
 
+![Game Theory Workshop gameplay](public/assets/game-theory-trailer.gif)
+
 A browser-based 3D multiplayer platform that turns game-theory concepts into playable experiments. Players explore a shared panda-themed lobby, then compete in **Crowd Rush**, **Battlefield (Colonel Blotto)**, and **Kuhn Poker**. A host console controls the session while a separate projector view presents the action.
 
 **Used by 30 concurrent players at a live university club workshop on October 13, 2026**, deployed on Railway. The application currently admits up to 40 participants; local 40-client protocol rehearsals are separate from the live attendance figure.
